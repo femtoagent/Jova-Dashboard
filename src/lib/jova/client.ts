@@ -1,0 +1,69 @@
+import type { ChatStreamEvent } from "@/lib/jova/types";
+
+/**
+ * Frontend -> BFF client. The browser only ever talks to our own /api/* routes; those routes
+ * (the BFF) hold the Letta password and broker the request. Swapping mock -> real Letta is a
+ * change inside /api/chat, not here.
+ */
+
+export interface HealthResult {
+  status: string;
+  backend: string;
+  time: number;
+}
+
+export async function health(): Promise<HealthResult> {
+  const res = await fetch("/api/health", { cache: "no-store" });
+  if (!res.ok) throw new Error(`health ${res.status}`);
+  return res.json();
+}
+
+/** POST a message and consume the NDJSON event stream, calling onEvent per event. */
+export async function streamChat(params: {
+  sessionId: string;
+  message: string;
+  signal?: AbortSignal;
+  onEvent: (e: ChatStreamEvent) => void;
+}): Promise<void> {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: params.sessionId, message: params.message }),
+    signal: params.signal,
+  });
+
+  if (!res.ok || !res.body) {
+    params.onEvent({ type: "error", message: `chat ${res.status}` });
+    params.onEvent({ type: "done" });
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      try {
+        params.onEvent(JSON.parse(line) as ChatStreamEvent);
+      } catch {
+        /* ignore malformed line */
+      }
+    }
+  }
+  const tail = buf.trim();
+  if (tail) {
+    try {
+      params.onEvent(JSON.parse(tail) as ChatStreamEvent);
+    } catch {
+      /* ignore */
+    }
+  }
+}
