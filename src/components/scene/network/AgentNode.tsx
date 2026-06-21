@@ -6,6 +6,7 @@ import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { getGlowTexture } from "../textures";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
+import { useJovaStore } from "@/lib/state/useJovaStore";
 import type { AgentNode as AgentNodeT } from "@/lib/network/types";
 
 /** Tiny deterministic PRNG so a chain's base shape is stable for the life of its task. */
@@ -44,10 +45,12 @@ export function AgentNode({
   focused,
   selected,
   talking,
+  teamName,
 }: {
   agent: AgentNodeT;
   color: string;
   teamId: string;
+  teamName: string;
   position: [number, number, number];
   brainPosition: [number, number, number];
   focused: boolean;
@@ -60,6 +63,12 @@ export function AgentNode({
   const coreSprite = useRef<THREE.Sprite>(null);
   const work = useRef(0);
   const selectAgent = useNetworkStore((s) => s.selectAgent);
+  const focusTeam = useNetworkStore((s) => s.focusTeam);
+  const setTalkingAgent = useNetworkStore((s) => s.setTalkingAgent);
+  const radialAgentId = useNetworkStore((s) => s.radialAgentId);
+  const setRadialAgent = useNetworkStore((s) => s.setRadialAgent);
+  const setRenameAgent = useNetworkStore((s) => s.setRenameAgent);
+  const openChatWith = useJovaStore((s) => s.openChatWith);
 
   // one chain per task (length = steps); idle → two short stubs. Seeded per task.id (stable shape).
   const chains = agent.tasks.length
@@ -106,6 +115,12 @@ export function AgentNode({
 
   const _p = useRef(new THREE.Vector3());
   const _prev = useRef(new THREE.Vector3());
+  const ping = useRef(0);
+
+  // ping the orb when this agent becomes selected (e.g. clicked in the bottom-left panel)
+  useEffect(() => {
+    if (selected) ping.current = 1;
+  }, [selected]);
 
   useFrame((state, dt) => {
     work.current += ((agent.tasks.length > 0 ? 1 : 0) - work.current) * (1 - Math.exp(-dt * 4));
@@ -114,7 +129,10 @@ export function AgentNode({
     if (lobe.current) lobe.current.scale.setScalar(1 + w * 0.15);
     // when "talking" (after you Ask its dream) the orb pulses livelier, like it's speaking
     const talk = talking ? 1 + Math.sin(t * 9) * 0.28 : 1;
-    if (coreSprite.current) coreSprite.current.scale.setScalar(0.18 * (1 + w * 0.7) * (selected ? 1.35 : 1) * talk);
+    const radialOpen = radialAgentId === agent.id;
+    ping.current += (0 - ping.current) * (1 - Math.exp(-dt * 7)); // decaying click bump
+    if (coreSprite.current)
+      coreSprite.current.scale.setScalar(0.18 * (1 + w * 0.7) * (selected || radialOpen ? 1.4 : 1) * talk * (1 + ping.current * 0.5));
 
     // re-walk each chain, displacing the straight line by a travelling wave (curve ↔ S morph)
     const attr = built.geometry.getAttribute("position") as THREE.BufferAttribute;
@@ -145,7 +163,11 @@ export function AgentNode({
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    selectAgent(teamId, agent.id);
+    ping.current = 1; // quick bump so the click visibly registers on the orb
+    // focused on the team: clicking the orb pops a radial menu. From the overview a tiny agent
+    // click just flies into its team.
+    if (focused) setRadialAgent(radialAgentId === agent.id ? null : agent.id);
+    else focusTeam(teamId);
   };
   const onOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -195,6 +217,65 @@ export function AgentNode({
           >
             {agent.label}
             {agent.tasks.length > 0 ? ` · ${agent.tasks.length} task${agent.tasks.length === 1 ? "" : "s"}` : ""}
+          </div>
+        </Html>
+      )}
+
+      {focused && radialAgentId === agent.id && (
+        <Html position={[0, 0, 0]} center style={{ pointerEvents: "none" }}>
+          <div style={{ position: "relative", width: 0, height: 0 }}>
+            {[
+              {
+                icon: "💬",
+                label: "Talk",
+                action: () => {
+                  setRadialAgent(null);
+                  setTalkingAgent(agent.id);
+                  openChatWith({ teamId, agentId: agent.id, teamName, label: agent.label, color });
+                },
+              },
+              { icon: "📋", label: "Tasks", action: () => selectAgent(teamId, agent.id) },
+              {
+                icon: "✎",
+                label: "Rename",
+                action: () => {
+                  selectAgent(teamId, agent.id);
+                  setRenameAgent(agent.id);
+                },
+              },
+            ].map((o, i, arr) => {
+              const spread = 56; // degrees between spokes, fanned above the orb
+              const ang = -90 - (spread * (arr.length - 1)) / 2 + i * spread;
+              const r = 48;
+              const x = Math.cos((ang * Math.PI) / 180) * r;
+              const y = Math.sin((ang * Math.PI) / 180) * r;
+              return (
+                <button
+                  key={o.label}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    o.action();
+                  }}
+                  title={o.label}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border text-[14px] leading-none backdrop-blur-md transition hover:brightness-125"
+                  style={{
+                    position: "absolute",
+                    left: x,
+                    top: y,
+                    transform: "translate(-50%, -50%)",
+                    pointerEvents: "auto",
+                    borderColor: `${color}aa`,
+                    background: `${color}30`,
+                    color,
+                    boxShadow: `0 0 10px ${color}55`,
+                    animation: "radial-pop 240ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards",
+                    animationDelay: `${i * 45}ms`,
+                  }}
+                >
+                  {o.icon}
+                </button>
+              );
+            })}
           </div>
         </Html>
       )}

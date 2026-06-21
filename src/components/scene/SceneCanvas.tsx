@@ -22,7 +22,11 @@ export default function SceneCanvas() {
       dpr={[1, 2]}
       gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
       camera={{ position: [0, 7, 26], fov: 45, near: 0.1, far: 300 }}
-      onPointerMissed={() => useNetworkStore.getState().focusTeam(null)}
+      onPointerMissed={() => {
+        const ns = useNetworkStore.getState();
+        if (ns.radialAgentId) ns.setRadialAgent(null);
+        else ns.focusTeam(null);
+      }}
       onCreated={({ gl, scene }) => {
         gl.toneMapping = THREE.NoToneMapping;
         scene.background = new THREE.Color("#04070a");

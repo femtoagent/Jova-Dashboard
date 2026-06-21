@@ -12,10 +12,11 @@ import { setSpeaking } from "@/lib/audio/amplitude";
  * (only the message content updates do, which is what we want).
  */
 export function useConversation() {
-  const send = useCallback(async (text: string, opts?: { arrival?: boolean }) => {
+  const send = useCallback(async (text: string, opts?: { arrival?: boolean; image?: string }) => {
     const arrival = opts?.arrival ?? false;
+    const image = opts?.image;
     const trimmed = text.trim();
-    if (!arrival && !trimmed) return;
+    if (!arrival && !trimmed && !image) return;
 
     const store = useJovaStore.getState();
     store.touch();
@@ -28,6 +29,7 @@ export function useConversation() {
         role: "user",
         content: trimmed,
         createdAt: Date.now(),
+        image,
       });
     }
 

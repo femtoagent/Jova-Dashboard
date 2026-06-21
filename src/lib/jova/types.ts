@@ -11,13 +11,38 @@ export interface ChatMessage {
   streaming?: boolean;
   /** her internal reasoning — used ONLY as an animation cue, never shown by default */
   reasoning?: string;
+  /** a special message rendered distinctly — e.g. a dream carried into the chat as context */
+  kind?: "dream";
+  /** an attached image (object/data URL) for the agent to process */
+  image?: string;
 }
+
+/** Who a chat session is addressed to — a team's agent. Absent on a session = Jova herself. */
+export interface ChatTarget {
+  teamId: string;
+  agentId: string;
+  teamName: string;
+  /** role label, e.g. "Product Manager" */
+  label: string;
+  color: string;
+}
+
+/** The Nexus orchestrator as a chat target — distinct from Jova and from team agents. */
+export const NEXUS_CHAT_TARGET: ChatTarget = {
+  teamId: "nexus",
+  agentId: "nexus",
+  teamName: "Nexus",
+  label: "Orchestrator",
+  color: "#9fe8ff",
+};
 
 export interface ChatSession {
   id: string;
   title: string;
   createdAt: number;
   updatedAt: number;
+  /** who this conversation is with; absent = Jova */
+  target?: ChatTarget;
 }
 
 /**

@@ -30,6 +30,26 @@ body {
   }
 }
 
+@keyframes radial-pop {
+  from {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* hide the native scrollbar but keep scrolling (used by the chat conversation avatar row) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 input[type="range"] {
   height: 4px;
 }

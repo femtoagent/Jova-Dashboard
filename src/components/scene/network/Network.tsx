@@ -132,6 +132,7 @@ export function Network() {
               agent={a}
               color={c.color}
               teamId={c.id}
+              teamName={c.name}
               position={agentWorld[`${c.id}:${a.id}`]!}
               brainPosition={c.position}
               focused={focusedTeamId === c.id}

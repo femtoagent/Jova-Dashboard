@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
+import { useJovaStore } from "@/lib/state/useJovaStore";
 import type { AgentNode, AgentRole, Team } from "@/lib/network/types";
 import { WindowPills, MetricRows } from "./metrics";
 import { scaleMetrics } from "@/lib/network/ledger";
@@ -135,7 +136,7 @@ function TeamView({ team, onSelect }: { team: Team; onSelect: (agentId: string) 
               <span className="flex items-center gap-1.5">
                 <Dot color={team.color} on={a.tasks.length > 0} />
                 <span className={a.role === "pm" ? "font-medium text-white/90" : "text-white/75"}>
-                  {ROLE_LABEL[a.role] ?? a.label}
+                  {a.label}
                 </span>
               </span>
               <span className="text-[10px] text-white/45">
@@ -173,16 +174,67 @@ function TeamView({ team, onSelect }: { team: Team; onSelect: (agentId: string) 
 
 function AgentDetail({ team, agent, onBack }: { team: Team; agent: AgentNode; onBack: () => void }) {
   const removeAgent = useNetworkStore((s) => s.removeAgent);
+  const setTalkingAgent = useNetworkStore((s) => s.setTalkingAgent);
+  const renameAgentId = useNetworkStore((s) => s.renameAgentId);
+  const setRenameAgent = useNetworkStore((s) => s.setRenameAgent);
+  const renameAgent = useNetworkStore((s) => s.renameAgent);
+  const openChatWith = useJovaStore((s) => s.openChatWith);
+  const editing = renameAgentId === agent.id;
+  const [draft, setDraft] = useState(agent.label);
+  useEffect(() => {
+    if (editing) setDraft(agent.label);
+  }, [editing, agent.id, agent.label]);
+
+  const talk = () => {
+    setTalkingAgent(agent.id);
+    openChatWith({ teamId: team.id, agentId: agent.id, teamName: team.name, label: agent.label, color: team.color });
+  };
+  const saveRename = () => {
+    const v = draft.trim();
+    if (v) renameAgent(team.id, agent.id, v);
+    setRenameAgent(null);
+  };
+
   return (
     <>
       <button onClick={onBack} className="mb-2 text-[11px] text-white/50 transition hover:text-white/80">
         ‹ {team.name}
       </button>
+
       <div className="mb-3 flex items-center gap-2">
         <Dot color={team.color} on={agent.tasks.length > 0} />
-        <span className="text-sm font-semibold" style={{ color: team.color }}>
-          {ROLE_LABEL[agent.role] ?? agent.label}
-        </span>
+        {editing ? (
+          <div className="flex flex-1 items-center gap-1">
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveRename();
+                if (e.key === "Escape") setRenameAgent(null);
+              }}
+              className="min-w-0 flex-1 rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-sm text-white outline-none focus:border-white/30"
+            />
+            <button onClick={saveRename} title="Save" className="rounded px-1.5 py-0.5 text-xs text-emerald-300/80 transition hover:bg-white/10">
+              ✓
+            </button>
+            <button onClick={() => setRenameAgent(null)} title="Cancel" className="rounded px-1.5 py-0.5 text-xs text-white/50 transition hover:bg-white/10">
+              ✕
+            </button>
+          </div>
+        ) : (
+          <>
+            <span className="flex-1 truncate text-sm font-semibold" style={{ color: team.color }}>
+              {agent.label}
+            </span>
+            <button onClick={talk} title="Talk" className="rounded px-1.5 py-1 text-sm text-white/60 transition hover:bg-white/10">
+              💬
+            </button>
+            <button onClick={() => setRenameAgent(agent.id)} title="Rename" className="rounded px-1.5 py-1 text-sm text-white/60 transition hover:bg-white/10">
+              ✎
+            </button>
+          </>
+        )}
       </div>
 
       <Section label="Working on" />

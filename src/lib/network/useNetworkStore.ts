@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { AgentNode, AgentRole, Approval, Dream, Team, TeamMetrics } from "./types";
+import { useJovaStore } from "@/lib/state/useJovaStore";
 
 /** Fallback origin for the team strands until Nexus publishes its real top-cap world position. */
 export const NEXUS_HUB: [number, number, number] = [0, 4, -20];
@@ -143,6 +144,10 @@ interface NetworkState {
   selectedAgentId: string | null;
   /** the agent currently "talking" (e.g. after you Ask a dream) — its orb animates. */
   talkingAgentId: string | null;
+  /** which agent's radial action menu is open (from clicking its orb); null = none. */
+  radialAgentId: string | null;
+  /** which agent's name is being edited inline in the panel; null = none. */
+  renameAgentId: string | null;
   /** PM/Nexus daily improvement ideas awaiting your response (separate from operational approvals). */
   dreams: Dream[];
   /** world position the team strands emanate from — Nexus's top cap (published on GLB load). */
@@ -165,6 +170,10 @@ interface NetworkState {
   runDreams: () => void;
   resolveDream: (dreamId: string) => void;
   askDream: (dreamId: string) => void;
+  setTalkingAgent: (agentId: string | null) => void;
+  setRadialAgent: (agentId: string | null) => void;
+  setRenameAgent: (agentId: string | null) => void;
+  renameAgent: (teamId: string, agentId: string, label: string) => void;
   setNexusHub: (p: [number, number, number]) => void;
 }
 
@@ -173,12 +182,14 @@ export const useNetworkStore = create<NetworkState>((set) => ({
   focusedTeamId: null,
   selectedAgentId: null,
   talkingAgentId: null,
+  radialAgentId: null,
+  renameAgentId: null,
   dreams: makeDreams(SEED_TEAMS),
   nexusHub: NEXUS_HUB,
   metricsWindow: 1,
 
-  focusTeam: (id) => set({ focusedTeamId: id, selectedAgentId: null, talkingAgentId: null }),
-  selectAgent: (teamId, agentId) => set({ focusedTeamId: teamId, selectedAgentId: agentId, talkingAgentId: null }),
+  focusTeam: (id) => set({ focusedTeamId: id, selectedAgentId: null, talkingAgentId: null, radialAgentId: null, renameAgentId: null }),
+  selectAgent: (teamId, agentId) => set({ focusedTeamId: teamId, selectedAgentId: agentId, talkingAgentId: null, radialAgentId: null, renameAgentId: null }),
   setMetricsWindow: (w) => set({ metricsWindow: w }),
 
   startTask: (teamId, agentId, title) =>
@@ -209,7 +220,14 @@ export const useNetworkStore = create<NetworkState>((set) => ({
     })),
 
   addAgent: (teamId, role, label) =>
-    set((st) => ({ teams: updateTeam(st.teams, teamId, (c) => ({ ...c, agents: layoutAgents([...c.agents, agent(role, label)]) })) })),
+    set((st) => ({
+      teams: updateTeam(st.teams, teamId, (c) => {
+        // make the name unique within the team (Developer, Developer 2, Developer 3…)
+        const n = c.agents.filter((a) => a.label === label || a.label.startsWith(`${label} `)).length;
+        const finalLabel = n === 0 ? label : `${label} ${n + 1}`;
+        return { ...c, agents: layoutAgents([...c.agents, agent(role, finalLabel)]) };
+      }),
+    })),
 
   removeAgent: (teamId, agentId) =>
     set((st) => ({
@@ -281,6 +299,18 @@ export const useNetworkStore = create<NetworkState>((set) => ({
       if (!team || !pm) return {};
       return { focusedTeamId: team.id, selectedAgentId: pm.id, talkingAgentId: pm.id };
     }),
+
+  setTalkingAgent: (agentId) => set({ talkingAgentId: agentId }),
+
+  setRadialAgent: (agentId) => set({ radialAgentId: agentId }),
+
+  setRenameAgent: (agentId) => set({ renameAgentId: agentId }),
+
+  renameAgent: (teamId, agentId, label) => {
+    set((st) => ({ teams: updateAgent(st.teams, teamId, agentId, (a) => ({ ...a, label })) }));
+    // keep any open chat threads with this agent (header, rail, composer, titles) in sync
+    useJovaStore.getState().renameTarget(teamId, agentId, label);
+  },
 
   setNexusHub: (p) => set({ nexusHub: p }),
 }));

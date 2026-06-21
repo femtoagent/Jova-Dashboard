@@ -1,6 +1,8 @@
 "use client";
 
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
+import { useJovaStore } from "@/lib/state/useJovaStore";
+import { NEXUS_CHAT_TARGET } from "@/lib/jova/types";
 import { WindowPills, MetricRows } from "./metrics";
 import { rollup, scaleMetrics, net as netOf } from "@/lib/network/ledger";
 
@@ -16,6 +18,7 @@ export function NexusInfoPanel() {
   const focusTeam = useNetworkStore((s) => s.focusTeam);
   const addTeam = useNetworkStore((s) => s.addTeam);
   const removeTeam = useNetworkStore((s) => s.removeTeam);
+  const openChatWith = useJovaStore((s) => s.openChatWith);
   if (focusedTeamId) return null; // the Team HQ panel takes over when one is focused
 
   const totals = rollup(teams, metricsWindow);
@@ -31,6 +34,13 @@ export function NexusInfoPanel() {
       <div className="mb-3">
         <MetricRows metrics={totals} />
       </div>
+
+      <button
+        onClick={() => openChatWith(NEXUS_CHAT_TARGET)}
+        className="mb-3 w-full rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-50 transition hover:bg-cyan-400/20"
+      >
+        Talk to Nexus
+      </button>
 
       <div className="mb-1 text-[10px] uppercase tracking-wider text-white/35">Teams</div>
       <ul className="max-h-52 space-y-1 overflow-y-auto pr-1">
