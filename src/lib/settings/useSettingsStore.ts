@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
 
 /** Which settings screen is showing. */
-export type SettingsScreen = "teams" | "team" | "agent" | "logs" | "history";
+export type SettingsScreen = "teams" | "team" | "agent" | "logs" | "history" | "nexus" | "jova";
 
 /** Sections of the per-agent screen (its own left-nav while drilled into an agent). */
 export type AgentSection = "identity" | "tools" | "skills" | "memory" | "access";
@@ -19,11 +19,13 @@ interface SettingsState {
   /** which section of the agent screen is showing */
   agentSection: AgentSection;
 
-  openSettings: () => void;
+  openSettings: (screen?: SettingsScreen) => void;
   closeSettings: () => void;
   showTeams: () => void;
   showLogs: () => void;
   showHistory: () => void;
+  showNexus: () => void;
+  showJova: () => void;
   showTeam: (teamId: string) => void;
   /** open a blank Team editor in create mode (no team exists until the user saves) */
   showNewTeam: () => void;
@@ -44,11 +46,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   agentId: null,
   agentSection: "identity",
 
-  openSettings: () => set({ open: true, screen: "teams", teamId: null, agentId: null }),
+  openSettings: (screen = "teams") => set({ open: true, screen, teamId: null, agentId: null }),
   closeSettings: () => set({ open: false }),
   showTeams: () => set({ screen: "teams" }),
   showLogs: () => set({ screen: "logs" }),
   showHistory: () => set({ screen: "history" }),
+  showNexus: () => set({ screen: "nexus" }),
+  showJova: () => set({ screen: "jova" }),
   showTeam: (teamId) => set({ screen: "team", teamId, agentId: null }),
   showNewTeam: () => set({ screen: "team", teamId: null, agentId: null }),
   showAgent: (teamId, agentId) => set({ screen: "agent", teamId, agentId, agentSection: "identity" }),

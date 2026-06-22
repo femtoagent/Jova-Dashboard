@@ -42,7 +42,7 @@ export function SessionsView({ onBack }: { onBack: () => void }) {
   const c = currentTarget?.color ?? "#67e8f9";
 
   return (
-    <div className="flex w-[168px] shrink-0 flex-col border-r border-white/10">
+    <div className="flex w-[150px] shrink-0 flex-col border-r border-white/10 sm:w-[168px]">
       <div className="flex items-center gap-1 border-b border-white/10 px-2 py-2">
         <button onClick={onBack} title="Back" className="rounded px-1 text-[12px] text-white/50 transition hover:bg-white/10 hover:text-white/80">
           ‹

@@ -63,7 +63,7 @@ export function ConversationRail() {
   if (mode === "sessions") return <SessionsView onBack={() => setMode("conversations")} />;
 
   return (
-    <div className="flex w-[200px] shrink-0 flex-col border-r border-white/10">
+    <div className="flex w-[150px] shrink-0 flex-col border-r border-white/10 sm:w-[200px]">
       <div className="flex items-center justify-between border-b border-white/10 py-2 pl-3 pr-1.5">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Conversations</span>
         <button

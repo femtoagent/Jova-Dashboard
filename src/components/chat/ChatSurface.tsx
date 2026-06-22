@@ -33,6 +33,7 @@ export function ChatSurface() {
   const editableAgent = target && target.teamId !== "nexus";
 
   const [height, setHeight] = useState(DEFAULT_H);
+  const [railOpen, setRailOpen] = useState(true);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
 
   const onHandleDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -65,6 +66,11 @@ export function ChatSurface() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // collapse the conversations rail by default on small screens — leaves the thread full-width
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 640px)").matches) setRailOpen(false);
+  }, []);
+
   if (!chatOpen) {
     return (
       <button
@@ -92,11 +98,18 @@ export function ChatSurface() {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <ConversationRail />
+        {railOpen && <ConversationRail />}
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
             <div className="flex min-w-0 items-center gap-2">
+              <button
+                onClick={() => setRailOpen((v) => !v)}
+                title={railOpen ? "Hide conversations" : "Show conversations"}
+                className="shrink-0 rounded-lg px-1.5 py-1 text-white/45 transition hover:bg-white/10 hover:text-white/80"
+              >
+                ☰
+              </button>
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accent, boxShadow: `0 0 6px ${accent}` }} />
               {editableAgent ? (
                 <button

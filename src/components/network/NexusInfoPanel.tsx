@@ -19,6 +19,7 @@ export function NexusInfoPanel() {
   const focusTeam = useNetworkStore((s) => s.focusTeam);
   const openChatWith = useJovaStore((s) => s.openChatWith);
   const openSettings = useSettingsStore((s) => s.openSettings);
+  const showNexus = useSettingsStore((s) => s.showNexus);
   if (focusedTeamId) return null; // the Team HQ panel takes over when one is focused
 
   const totals = rollup(teams, metricsWindow);
@@ -35,12 +36,23 @@ export function NexusInfoPanel() {
         <MetricRows metrics={totals} />
       </div>
 
-      <button
-        onClick={() => openChatWith(NEXUS_CHAT_TARGET)}
-        className="mb-3 w-full rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-50 transition hover:bg-cyan-400/20"
-      >
-        Talk to Nexus
-      </button>
+      <div className="mb-3 flex gap-1.5">
+        <button
+          onClick={() => openChatWith(NEXUS_CHAT_TARGET)}
+          className="flex-1 rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-50 transition hover:bg-cyan-400/20"
+        >
+          Talk to Nexus
+        </button>
+        <button
+          onClick={() => {
+            openSettings();
+            showNexus();
+          }}
+          className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70 transition hover:bg-white/10"
+        >
+          ✎ Edit
+        </button>
+      </div>
 
       <div className="mb-1 text-[10px] uppercase tracking-wider text-white/35">Teams</div>
       <ul className="max-h-52 space-y-1 overflow-y-auto pr-1">
@@ -66,7 +78,7 @@ export function NexusInfoPanel() {
       </ul>
 
       <button
-        onClick={openSettings}
+        onClick={() => openSettings("teams")}
         className="mt-2 w-full rounded-md border border-cyan-300/25 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-50 transition hover:bg-cyan-400/20"
       >
         Manage teams

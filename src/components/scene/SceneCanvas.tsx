@@ -2,14 +2,17 @@
 
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Suspense, useRef } from "react";
+import { Suspense, lazy, useRef } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { Wisp } from "./Wisp";
-import { Nexus } from "./Nexus";
-import { NexusAudio } from "./NexusAudio";
 import { Effects } from "./Effects";
-import { Network } from "./network/Network";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
+
+// Heavy assets (the procedural Nexus + the whole team network + spatial audio) are only loaded when
+// the user expands to full mode — keeps the default "just Jova" load cheap (no network code at all).
+const NexusViz = lazy(() => import("./NexusViz").then((m) => ({ default: m.NexusViz })));
+const Network = lazy(() => import("./network/Network").then((m) => ({ default: m.Network })));
+const NexusAudio = lazy(() => import("./NexusAudio").then((m) => ({ default: m.NexusAudio })));
 
 // Nexus placement: huge, deep in the background, its base on a low floor.
 const NEXUS_SCALE = 3;
@@ -17,6 +20,8 @@ const NEXUS_POS: [number, number, number] = [0, -3, -22];
 
 /** Jova (the Light Orb) front-and-centre, with Nexus the Orchestrator looming huge in the background. */
 export default function SceneCanvas() {
+  const fullMode = useJovaStore((s) => s.fullMode);
+  const nexusStyle = useJovaStore((s) => s.nexusStyle);
   return (
     <Canvas
       dpr={[1, 2]}
@@ -40,14 +45,15 @@ export default function SceneCanvas() {
       <CoreLight />
 
       <Wisp />
-      <Suspense fallback={null}>
-        <Nexus scale={NEXUS_SCALE} position={NEXUS_POS} />
-      </Suspense>
-
-      <Network />
+      {fullMode && (
+        <Suspense fallback={null}>
+          <NexusViz scale={NEXUS_SCALE} position={NEXUS_POS} style={nexusStyle} />
+          <Network />
+          <NexusAudio />
+        </Suspense>
+      )}
 
       <CameraRig />
-      <NexusAudio />
       <Effects />
     </Canvas>
   );

@@ -4,8 +4,9 @@ import { create } from "zustand";
 import type { AccessGrant, AgentNode, AgentRole, Approval, Dream, MemoryNode, Team, TeamMetrics } from "./types";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 
-/** Fallback origin for the team strands until Nexus publishes its real top-cap world position. */
-export const NEXUS_HUB: [number, number, number] = [0, 4, -20];
+/** Fallback origin for the team strands until NexusViz publishes its real crown world position.
+ *  Matches NexusViz's crown ([0,-3,-22] + CROWN_LOCAL 1.6 * scale 3) so there's no first-frame pop. */
+export const NEXUS_HUB: [number, number, number] = [0, 1.8, -22];
 
 export type MetricsWindow = 1 | 3 | 7 | 30 | "all";
 
@@ -191,7 +192,7 @@ interface NetworkState {
   draggingTeamId: string | null;
   /** PM/Nexus daily improvement ideas awaiting your response (separate from operational approvals). */
   dreams: Dream[];
-  /** world position the team strands emanate from — Nexus's top cap (published on GLB load). */
+  /** world position the team strands emanate from — Nexus's crown (published by NexusViz on mount). */
   nexusHub: [number, number, number];
   /** shared time window for all financial metrics (team + Nexus rollup). */
   metricsWindow: MetricsWindow;

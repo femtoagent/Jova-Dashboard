@@ -12,6 +12,7 @@ import { NexusInfoPanel } from "@/components/network/NexusInfoPanel";
 import { DreamerPane } from "@/components/network/DreamerPane";
 import { SettingsGear } from "@/components/settings/SettingsGear";
 import { SettingsOverlay } from "@/components/settings/SettingsOverlay";
+import { WorldToggle } from "@/components/WorldToggle";
 
 // 3D world is client-only.
 const SceneCanvas = dynamic(() => import("@/components/scene/SceneCanvas"), { ssr: false });
@@ -20,8 +21,15 @@ export function CommandCenter() {
   const { send } = useConversation();
   const greeted = useRef(false);
   const wispState = useJovaStore((s) => s.wispState);
+  const fullMode = useJovaStore((s) => s.fullMode);
   const sessionCount = useJovaStore((s) => s.sessions.length);
   const createSession = useJovaStore((s) => s.createSession);
+  const hydrateJovaStyle = useJovaStore((s) => s.hydrateJovaStyle);
+
+  // Apply the saved Jova-view preference once on the client (localStorage isn't available during SSR).
+  useEffect(() => {
+    hydrateJovaStyle();
+  }, [hydrateJovaStyle]);
 
   // Ensure a session exists.
   useEffect(() => {
@@ -42,12 +50,14 @@ export function CommandCenter() {
         <div className="absolute inset-0">
           <SceneCanvas />
         </div>
+        <WorldToggle />
         <DemoControls />
-        <NexusInfoPanel />
-        <DreamerPane />
-        <TeamInfoPanel />
+        {fullMode && <NexusInfoPanel />}
+        {fullMode && <DreamerPane />}
+        {fullMode && <TeamInfoPanel />}
         <ChatSurface />
-        <SettingsGear />
+        {/* The cog lives on both screens: the network opens full Settings; "just Jova" opens her editor. */}
+        {fullMode ? <SettingsGear /> : <SettingsGear to="jova" title="Edit Jova" />}
         <SettingsOverlay />
       </main>
     </AuthGate>

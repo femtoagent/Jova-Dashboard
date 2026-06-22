@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
+import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useSettingsStore, type AgentSection } from "@/lib/settings/useSettingsStore";
 import { roleHasSkills } from "@/lib/settings/options";
 import { TeamsAdmin } from "./TeamsAdmin";
@@ -9,6 +10,8 @@ import { TeamEditor } from "./TeamEditor";
 import { AgentEditor } from "./AgentEditor";
 import { LogsScreen } from "./LogsScreen";
 import { HistoryScreen } from "./HistoryScreen";
+import { NexusEditor } from "./NexusEditor";
+import { JovaEditor } from "./JovaEditor";
 
 /** Sits above drei's <Html> z-index range (~16.7M) so 3D labels/radial popups can't bleed through. */
 const OVERLAY_Z = 2_000_000_000;
@@ -62,12 +65,14 @@ export function SettingsOverlay() {
           >
             ✕
           </button>
-          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
             {screen === "teams" && <TeamsAdmin />}
             {screen === "team" && <TeamEditor />}
             {screen === "agent" && <AgentEditor />}
             {screen === "logs" && <LogsScreen />}
             {screen === "history" && <HistoryScreen />}
+            {screen === "nexus" && <NexusEditor />}
+            {screen === "jova" && <JovaEditor />}
           </div>
         </div>
       </div>
@@ -81,12 +86,18 @@ function TopNav() {
   const showTeams = useSettingsStore((s) => s.showTeams);
   const showLogs = useSettingsStore((s) => s.showLogs);
   const showHistory = useSettingsStore((s) => s.showHistory);
+  const showNexus = useSettingsStore((s) => s.showNexus);
+  const showJova = useSettingsStore((s) => s.showJova);
+  // On the "just Jova" screen the network isn't loaded, so only her appearance editor applies.
+  const fullMode = useJovaStore((s) => s.fullMode);
   return (
-    <nav className="flex w-[180px] shrink-0 flex-col gap-1 border-r border-white/10 p-3">
+    <nav className="flex w-[132px] shrink-0 flex-col gap-1 border-r border-white/10 p-3 sm:w-[180px]">
       <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">Settings</div>
-      <NavItem active={screen === "teams" || screen === "team"} onClick={showTeams} label="Teams" />
-      <NavItem active={screen === "logs"} onClick={showLogs} label="Logs" />
-      <NavItem active={screen === "history"} onClick={showHistory} label="Chat history" />
+      {fullMode && <NavItem active={screen === "teams" || screen === "team"} onClick={showTeams} label="Teams" />}
+      <NavItem active={screen === "jova"} onClick={showJova} label="Jova" />
+      {fullMode && <NavItem active={screen === "nexus"} onClick={showNexus} label="Nexus" />}
+      {fullMode && <NavItem active={screen === "logs"} onClick={showLogs} label="Logs" />}
+      {fullMode && <NavItem active={screen === "history"} onClick={showHistory} label="Chat history" />}
     </nav>
   );
 }
@@ -103,7 +114,7 @@ function AgentNav() {
   const agent = team?.agents.find((a) => a.id === agentId) ?? null;
 
   return (
-    <nav className="flex w-[180px] shrink-0 flex-col gap-1 border-r border-white/10 p-3">
+    <nav className="flex w-[132px] shrink-0 flex-col gap-1 border-r border-white/10 p-3 sm:w-[180px]">
       <button
         onClick={showTeams}
         className="mb-0.5 self-start rounded px-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 transition hover:text-white/60"

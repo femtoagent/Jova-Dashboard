@@ -6,15 +6,15 @@ import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { setWispDynamics } from "@/lib/scene/wispDynamics";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
 import { useJovaStore } from "@/lib/state/useJovaStore";
-import { OrbWisp } from "./OrbWisp";
+import { JovaStage, Mycelium } from "./JovaStage";
 
 /**
  * Jova is placed RELATIVE TO THE CAMERA so she stays framed wherever it flies:
- *   - centre-front when you're with her (overview / talking to her)
- *   - tucked bottom-right when a team is focused (leaving the corner for its info panels)
+ *   - centre-front, large, when it's "just Jova" (lite mode) — her hero stage
+ *   - contracted to the compact orb, tucked bottom-right, once the full network is expanded
  * Offsets are (right, up, forward) in camera space; forward is how far in front of the lens.
  */
-const CENTRE: [number, number, number] = [0, -0.9, -6.5];
+const CENTRE: [number, number, number] = [0, -0.4, -6.5];
 const CORNER: [number, number, number] = [3.3, -2.0, -6.5];
 
 export function Wisp() {
@@ -24,13 +24,15 @@ export function Wisp() {
   const camera = useThree((s) => s.camera);
   const focusTeam = useNetworkStore((s) => s.focusTeam);
   const setChatOpen = useJovaStore((s) => s.setChatOpen);
+  const fullMode = useJovaStore((s) => s.fullMode);
+  const jovaStyle = useJovaStore((s) => s.jovaStyle);
 
   useFrame((state, dt) => {
     const g = group.current;
     if (!g) return;
     const t = state.clock.elapsedTime;
-    const focused = useNetworkStore.getState().focusedTeamId != null;
-    const o = focused ? CORNER : CENTRE;
+    // full network → she contracts to the corner; lite "just Jova" → centre stage
+    const o = fullMode ? CORNER : CENTRE;
 
     // camera-relative target -> world (so she tracks the view, with a gentle idle bob)
     desired.current.set(o[0], o[1] + Math.sin(t * 0.6) * 0.05, o[2]);
@@ -63,12 +65,20 @@ export function Wisp() {
 
   return (
     <group ref={group}>
-      {/* invisible, raycastable hit sphere so she's clickable */}
+      {/* invisible, raycastable hit sphere so she's clickable — large in lite, tight as the corner orb */}
       <mesh onClick={onClick}>
-        <sphereGeometry args={[0.7, 16, 16]} />
+        <sphereGeometry args={[fullMode ? 0.7 : 2.6, 16, 16]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      <OrbWisp />
+      {fullMode ? (
+        // In the full network she contracts to a compact Mycelium tucked in the corner.
+        <group scale={0.22}>
+          {/* halve her speaking glow in the corner so she isn't too bright on the network side */}
+          <Mycelium speakGlow={0.5} />
+        </group>
+      ) : (
+        <JovaStage style={jovaStyle} />
+      )}
     </group>
   );
 }

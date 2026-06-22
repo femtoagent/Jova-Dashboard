@@ -18,6 +18,7 @@ export function TeamBrain({ team }: { team: Team }) {
   const halo = useRef<THREE.Sprite>(null);
   const alert = useRef<THREE.Sprite>(null);
   const dragRef = useRef<{ cleanup: () => void } | null>(null);
+  const phase = useRef(0);
   const focusTeam = useNetworkStore((s) => s.focusTeam);
   const selectAgent = useNetworkStore((s) => s.selectAgent);
   const focused = useNetworkStore((s) => s.focusedTeamId === team.id);
@@ -34,11 +35,14 @@ export function TeamBrain({ team }: { team: Team }) {
     document.body.style.cursor = "auto";
   }, []);
 
-  useFrame((state) => {
+  useFrame((state, dt) => {
     const t = state.clock.elapsedTime;
     const working = team.agents.some((a) => a.tasks.length > 0);
     const needs = team.approvals.length > 0;
-    const pulse = 1 + Math.sin(t * (needs ? 5 : 1.5) + team.position[0]) * (needs ? 0.14 : 0.06);
+    // accumulate phase so the needs-driven frequency change doesn't snap (sin(elapsedTime*freq) pops
+    // when freq flips, worse the longer the app has been open)
+    phase.current += dt * (needs ? 5 : 1.5);
+    const pulse = 1 + Math.sin(phase.current + team.position[0]) * (needs ? 0.14 : 0.06);
     const bright = working ? 1.5 : 1.0;
     if (core.current) core.current.scale.setScalar(pulse * (focused ? 1.12 : 1));
     if (halo.current) {

@@ -7,6 +7,27 @@ import { type Mood, type WispType, NEUTRAL_MOOD } from "@/lib/mood";
 /** The four states from the brief — the soul of the wisp. */
 export type WispState = "approaching" | "present" | "speaking" | "receded";
 
+/** Procedural Nexus visual styles (all in the team/agent design language). */
+export type NexusStyle = "brain" | "neuron" | "rings" | "galaxy" | "vortex";
+
+/** Jova's hero forms on the "just Jova" screen — each a distinct screen-filling presence. */
+export type JovaStyle =
+  | "mycelium"
+  | "glyph"
+  | "medusa"
+  | "cocoon"
+  | "resonance"
+  | "mothership"
+  | "corona"
+  | "plasma"
+  | "singularity";
+
+/** Persisted "Jova view" preference — set in the Settings Jova editor, remembered across reloads. */
+const JOVA_STYLE_KEY = "jova.jovaStyle";
+const JOVA_STYLES: JovaStyle[] = [
+  "mycelium", "glyph", "medusa", "cocoon", "resonance", "mothership", "corona", "plasma", "singularity",
+];
+
 interface JovaState {
   // ---- scene ----
   wispType: WispType;
@@ -17,6 +38,12 @@ interface JovaState {
   nexusActive: boolean;
   /** Master switch for Nexus's spatial audio (off by default; needs a user gesture to start). */
   soundOn: boolean;
+  /** false = lite "just Jova" (cheap load); true = the full network/Nexus world is loaded. */
+  fullMode: boolean;
+  /** which procedural Nexus style is shown */
+  nexusStyle: NexusStyle;
+  /** which hero form Jova takes on the "just Jova" screen */
+  jovaStyle: JovaStyle;
 
   // ---- chat ----
   sessions: ChatSession[];
@@ -37,6 +64,12 @@ interface JovaState {
   setQuality: (q: "high" | "low") => void;
   setNexusActive: (v: boolean) => void;
   setSoundOn: (v: boolean) => void;
+  setFullMode: (v: boolean) => void;
+  toggleFullMode: () => void;
+  setNexusStyle: (s: NexusStyle) => void;
+  setJovaStyle: (s: JovaStyle) => void;
+  /** Apply the persisted Jova-view preference (call once on the client after mount). */
+  hydrateJovaStyle: () => void;
 
   // ---- chat actions ----
   createSession: (title?: string, target?: ChatTarget) => string;
@@ -103,6 +136,9 @@ export const useJovaStore = create<JovaState>((set, get) => ({
   quality: "high",
   nexusActive: false,
   soundOn: false,
+  fullMode: false,
+  nexusStyle: "brain",
+  jovaStyle: "mycelium",
 
   sessions: [],
   activeSessionId: null,
@@ -120,6 +156,23 @@ export const useJovaStore = create<JovaState>((set, get) => ({
   setQuality: (q) => set({ quality: q }),
   setNexusActive: (v) => set({ nexusActive: v }),
   setSoundOn: (v) => set({ soundOn: v }),
+  // leaving full mode also clears nexusActive (its only reset lived in the now-unmounted network driver)
+  setFullMode: (v) => set(v ? { fullMode: true } : { fullMode: false, nexusActive: false }),
+  toggleFullMode: () => set((st) => (st.fullMode ? { fullMode: false, nexusActive: false } : { fullMode: true })),
+  setNexusStyle: (s) => set({ nexusStyle: s }),
+  setJovaStyle: (s) => {
+    if (typeof window !== "undefined") {
+      try { window.localStorage.setItem(JOVA_STYLE_KEY, s); } catch {}
+    }
+    set({ jovaStyle: s });
+  },
+  hydrateJovaStyle: () => {
+    if (typeof window === "undefined") return;
+    try {
+      const v = window.localStorage.getItem(JOVA_STYLE_KEY);
+      if (v && (JOVA_STYLES as string[]).includes(v)) set({ jovaStyle: v as JovaStyle });
+    } catch {}
+  },
 
   createSession: (title, target) => {
     const id = crypto.randomUUID();
