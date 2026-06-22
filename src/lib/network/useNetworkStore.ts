@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { AgentNode, AgentRole, Approval, Dream, Team, TeamMetrics } from "./types";
+import type { AccessGrant, AgentNode, AgentRole, Approval, Dream, MemoryNode, Team, TeamMetrics } from "./types";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 
 /** Fallback origin for the team strands until Nexus publishes its real top-cap world position. */
@@ -48,8 +48,47 @@ function layoutAgents(agents: AgentNode[]): AgentNode[] {
 }
 
 let agentSeed = 1;
+const ROLE_TRAIT: Record<AgentRole, string> = {
+  pm: "Owns the roadmap",
+  developer: "Ships the build",
+  qa: "Guards quality",
+  devops: "Keeps it running",
+  marketing: "Tells the story",
+  cx: "Speaks for the users",
+};
+/** A small seeded memory web so every agent has something to show in the (read-only) memory view. */
+function mockMemory(role: AgentRole, label: string): MemoryNode[] {
+  return [
+    { id: "core", label: `${label} — identity`, kind: "persona_core", links: ["human", "role"] },
+    { id: "human", label: "Operator", kind: "human", links: ["core"] },
+    { id: "role", label: ROLE_TRAIT[role], kind: "fact", links: ["core", "growth"] },
+    { id: "growth", label: "Lessons so far", kind: "persona_growth", links: ["role"] },
+  ];
+}
+
+let accessSeed = 1;
+const newAccessId = () => `acc-${accessSeed++}`;
+/** A seeded access grant so the Access view isn't empty (secret masked; demo only). */
+function mockAccess(): AccessGrant[] {
+  return [{ id: newAccessId(), app: "OpenRouter", keyHint: "sk-or-••••a1b2" }];
+}
 function agent(role: AgentRole, label: string): AgentNode {
-  return { id: `${role}-${agentSeed}`, role, label, offset: [0, 0, 0], seed: agentSeed++ * 97 + 13, tasks: [], recent: [] };
+  return {
+    id: `${role}-${agentSeed}`,
+    role,
+    label,
+    offset: [0, 0, 0],
+    seed: agentSeed++ * 97 + 13,
+    tasks: [],
+    recent: [],
+    client: "letta",
+    openRouterPreset: "",
+    soul: "",
+    tools: [],
+    skills: [],
+    memory: mockMemory(role, label),
+    access: mockAccess(),
+  };
 }
 
 let taskCounter = 1;
@@ -87,7 +126,7 @@ function team(
   ageDays: number,
   approvals: Approval[] = []
 ): Team {
-  return { id, name, position, color, agents: layoutAgents(agents), metrics, approvals, ageDays };
+  return { id, name, position, color, agents: layoutAgents(agents), metrics, approvals, ageDays, mission: "", solvingFor: "" };
 }
 
 /** Teams float high/far on a randomly-feeling canopy; strands rise to them from Nexus's crown. */
@@ -146,8 +185,10 @@ interface NetworkState {
   talkingAgentId: string | null;
   /** which agent's radial action menu is open (from clicking its orb); null = none. */
   radialAgentId: string | null;
-  /** which agent's name is being edited inline in the panel; null = none. */
-  renameAgentId: string | null;
+  /** which team's brain radial menu is open (from clicking its brain while focused); null = none. */
+  radialTeamId: string | null;
+  /** which team is currently being dragged (overview reposition); freezes camera parallax. null = none. */
+  draggingTeamId: string | null;
   /** PM/Nexus daily improvement ideas awaiting your response (separate from operational approvals). */
   dreams: Dream[];
   /** world position the team strands emanate from — Nexus's top cap (published on GLB load). */
@@ -161,9 +202,22 @@ interface NetworkState {
   startTask: (teamId: string, agentId: string, title: string) => void;
   advanceTask: (teamId: string, agentId: string, taskId: string) => void;
   completeTask: (teamId: string, agentId: string, taskId: string) => void;
-  addAgent: (teamId: string, role: AgentRole, label: string) => void;
+  addAgent: (teamId: string, role: AgentRole, label: string) => string | null;
   removeAgent: (teamId: string, agentId: string) => void;
-  addTeam: () => void;
+  /** create a team (optionally with identity); returns the new team id */
+  createTeam: (input?: { name?: string; mission?: string; solvingFor?: string }) => string;
+  /** edit a team's identity (name / mission / what they're solving for) */
+  updateTeam: (teamId: string, patch: { name?: string; mission?: string; solvingFor?: string }) => void;
+  /** edit an agent's identity; a label change also syncs open chat threads */
+  updateAgent: (
+    teamId: string,
+    agentId: string,
+    patch: Partial<Pick<AgentNode, "label" | "client" | "openRouterPreset" | "soul" | "tools" | "skills">>
+  ) => void;
+  /** add an app / API-key grant to an agent (caller passes an already-masked keyHint, never the secret) */
+  addAccess: (teamId: string, agentId: string, app: string, keyHint?: string) => void;
+  /** remove an access grant */
+  removeAccess: (teamId: string, agentId: string, grantId: string) => void;
   removeTeam: (teamId: string) => void;
   addApproval: (teamId: string, agentId: string, agentLabel: string, text: string) => void;
   resolveApproval: (teamId: string, approvalId: string) => void;
@@ -172,24 +226,27 @@ interface NetworkState {
   askDream: (dreamId: string) => void;
   setTalkingAgent: (agentId: string | null) => void;
   setRadialAgent: (agentId: string | null) => void;
-  setRenameAgent: (agentId: string | null) => void;
-  renameAgent: (teamId: string, agentId: string, label: string) => void;
+  setRadialTeam: (teamId: string | null) => void;
+  /** move a team's brain in world space (drag-to-organize at the Nexus overview) */
+  setTeamPosition: (teamId: string, position: [number, number, number]) => void;
+  setDraggingTeam: (teamId: string | null) => void;
   setNexusHub: (p: [number, number, number]) => void;
 }
 
-export const useNetworkStore = create<NetworkState>((set) => ({
+export const useNetworkStore = create<NetworkState>((set, get) => ({
   teams: SEED_TEAMS,
   focusedTeamId: null,
   selectedAgentId: null,
   talkingAgentId: null,
   radialAgentId: null,
-  renameAgentId: null,
+  radialTeamId: null,
+  draggingTeamId: null,
   dreams: makeDreams(SEED_TEAMS),
   nexusHub: NEXUS_HUB,
   metricsWindow: 1,
 
-  focusTeam: (id) => set({ focusedTeamId: id, selectedAgentId: null, talkingAgentId: null, radialAgentId: null, renameAgentId: null }),
-  selectAgent: (teamId, agentId) => set({ focusedTeamId: teamId, selectedAgentId: agentId, talkingAgentId: null, radialAgentId: null, renameAgentId: null }),
+  focusTeam: (id) => set({ focusedTeamId: id, selectedAgentId: null, talkingAgentId: null, radialAgentId: null, radialTeamId: null }),
+  selectAgent: (teamId, agentId) => set({ focusedTeamId: teamId, selectedAgentId: agentId, talkingAgentId: null, radialAgentId: null, radialTeamId: null }),
   setMetricsWindow: (w) => set({ metricsWindow: w }),
 
   startTask: (teamId, agentId, title) =>
@@ -219,28 +276,38 @@ export const useNetworkStore = create<NetworkState>((set) => ({
       }),
     })),
 
-  addAgent: (teamId, role, label) =>
+  addAgent: (teamId, role, label) => {
+    const t = get().teams.find((c) => c.id === teamId);
+    if (!t) return null;
+    if (role === "pm" && t.agents.some((a) => a.role === "pm")) return null; // one PM per team
+    // make the name unique within the team (Developer, Developer 2, Developer 3…)
+    const n = t.agents.filter((a) => a.label === label || a.label.startsWith(`${label} `)).length;
+    const finalLabel = n === 0 ? label : `${label} ${n + 1}`;
+    const created = agent(role, finalLabel);
     set((st) => ({
-      teams: updateTeam(st.teams, teamId, (c) => {
-        // make the name unique within the team (Developer, Developer 2, Developer 3…)
-        const n = c.agents.filter((a) => a.label === label || a.label.startsWith(`${label} `)).length;
-        const finalLabel = n === 0 ? label : `${label} ${n + 1}`;
-        return { ...c, agents: layoutAgents([...c.agents, agent(role, finalLabel)]) };
-      }),
-    })),
+      teams: updateTeam(st.teams, teamId, (c) => ({ ...c, agents: layoutAgents([...c.agents, created]) })),
+    }));
+    return created.id;
+  },
 
-  removeAgent: (teamId, agentId) =>
+  removeAgent: (teamId, agentId) => {
+    const t = get().teams.find((c) => c.id === teamId);
+    const target = t?.agents.find((a) => a.id === agentId);
+    if (!target || target.role === "pm") return; // the PM can't be removed
     set((st) => ({
       teams: updateTeam(st.teams, teamId, (c) => ({ ...c, agents: layoutAgents(c.agents.filter((a) => a.id !== agentId)) })),
       selectedAgentId: st.selectedAgentId === agentId ? null : st.selectedAgentId,
-    })),
+    }));
+    // close any open chat threads with this agent so they don't orphan
+    useJovaStore.getState().closeConversation(teamId, agentId);
+  },
 
-  addTeam: () =>
+  createTeam: (input) => {
+    const k = addedCount++;
+    const id = `co-${teamIdCounter++}`;
+    const name = input?.name?.trim() || NEW_NAMES[k % NEW_NAMES.length] || `Team ${k + 1}`;
+    const color = PALETTE[k % PALETTE.length] ?? "#9fe8ff";
     set((st) => {
-      const k = addedCount++;
-      const name = NEW_NAMES[k % NEW_NAMES.length] ?? `Team ${k + 1}`;
-      const id = `co-${teamIdCounter++}`;
-      const color = PALETTE[k % PALETTE.length] ?? "#9fe8ff";
       const co = team(
         id,
         name,
@@ -250,19 +317,49 @@ export const useNetworkStore = create<NetworkState>((set) => ({
         { tokensIn: 20000, tokensOut: 9000, tokenCost: 0.4, productCost: 0.2, revenue: 0 },
         0
       );
+      co.mission = input?.mission ?? "";
+      co.solvingFor = input?.solvingFor ?? "";
       return { teams: [...st.teams, co], focusedTeamId: id, selectedAgentId: null };
-    }),
+    });
+    return id;
+  },
 
-  removeTeam: (teamId) =>
-    set((st) => {
-      const c = st.teams.find((x) => x.id === teamId);
-      if (!c || c.ageDays > 3) return {}; // only young teams (≤3 days) can be deleted
-      return {
-        teams: st.teams.filter((x) => x.id !== teamId),
-        focusedTeamId: st.focusedTeamId === teamId ? null : st.focusedTeamId,
-        selectedAgentId: st.focusedTeamId === teamId ? null : st.selectedAgentId,
-      };
-    }),
+  updateTeam: (teamId, patch) =>
+    set((st) => ({ teams: updateTeam(st.teams, teamId, (c) => ({ ...c, ...patch })) })),
+
+  updateAgent: (teamId, agentId, patch) => {
+    set((st) => ({ teams: updateAgent(st.teams, teamId, agentId, (a) => ({ ...a, ...patch })) }));
+    // a label change must propagate to any open chat threads (header, rail, composer, titles)
+    if (patch.label) useJovaStore.getState().renameTarget(teamId, agentId, patch.label);
+  },
+
+  addAccess: (teamId, agentId, app, keyHint) =>
+    set((st) => ({
+      teams: updateAgent(st.teams, teamId, agentId, (a) => ({
+        ...a,
+        access: [...(a.access ?? []), { id: newAccessId(), app, keyHint }],
+      })),
+    })),
+
+  removeAccess: (teamId, agentId, grantId) =>
+    set((st) => ({
+      teams: updateAgent(st.teams, teamId, agentId, (a) => ({
+        ...a,
+        access: (a.access ?? []).filter((g) => g.id !== grantId),
+      })),
+    })),
+
+  removeTeam: (teamId) => {
+    const c = get().teams.find((x) => x.id === teamId);
+    if (!c || c.ageDays > 3) return; // only young teams (≤3 days) can be deleted
+    set((st) => ({
+      teams: st.teams.filter((x) => x.id !== teamId),
+      focusedTeamId: st.focusedTeamId === teamId ? null : st.focusedTeamId,
+      selectedAgentId: st.focusedTeamId === teamId ? null : st.selectedAgentId,
+    }));
+    // close any open chat threads with this team's agents
+    for (const a of c.agents) useJovaStore.getState().closeConversation(teamId, a.id);
+  },
 
   addApproval: (teamId, agentId, agentLabel, text) =>
     set((st) => ({
@@ -302,15 +399,13 @@ export const useNetworkStore = create<NetworkState>((set) => ({
 
   setTalkingAgent: (agentId) => set({ talkingAgentId: agentId }),
 
-  setRadialAgent: (agentId) => set({ radialAgentId: agentId }),
+  setRadialAgent: (agentId) => set({ radialAgentId: agentId, radialTeamId: null }),
 
-  setRenameAgent: (agentId) => set({ renameAgentId: agentId }),
+  setRadialTeam: (teamId) => set({ radialTeamId: teamId, radialAgentId: null }),
 
-  renameAgent: (teamId, agentId, label) => {
-    set((st) => ({ teams: updateAgent(st.teams, teamId, agentId, (a) => ({ ...a, label })) }));
-    // keep any open chat threads with this agent (header, rail, composer, titles) in sync
-    useJovaStore.getState().renameTarget(teamId, agentId, label);
-  },
+  setTeamPosition: (teamId, position) => set((st) => ({ teams: updateTeam(st.teams, teamId, (c) => ({ ...c, position })) })),
+
+  setDraggingTeam: (teamId) => set({ draggingTeamId: teamId }),
 
   setNexusHub: (p) => set({ nexusHub: p }),
 }));

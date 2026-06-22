@@ -1,34 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
 import { useJovaStore } from "@/lib/state/useJovaStore";
-import type { AgentNode, AgentRole, Team } from "@/lib/network/types";
+import { useSettingsStore } from "@/lib/settings/useSettingsStore";
+import type { AgentNode, Team } from "@/lib/network/types";
 import { WindowPills, MetricRows } from "./metrics";
 import { scaleMetrics } from "@/lib/network/ledger";
 
-const ROLE_LABEL: Record<string, string> = {
-  pm: "Product Manager",
-  developer: "Developer",
-  qa: "QA / DevOps",
-  devops: "DevOps",
-  marketing: "Marketing",
-  cx: "Customer Experience",
-};
-
-// roles you can add (one PM per team, so it's not offered here)
-const ADDABLE: { role: AgentRole; label: string }[] = [
-  { role: "developer", label: "Developer" },
-  { role: "qa", label: "QA / DevOps" },
-  { role: "devops", label: "DevOps" },
-  { role: "marketing", label: "Marketing" },
-  { role: "cx", label: "Customer Experience" },
-];
-
 /**
- * "Team HQ" — a glassy bottom-left card (opposite Jova in the bottom-right). Progressive
- * disclosure: agents + initiatives are shown; metrics are a compact strip; approvals only appear
- * when an agent needs sign-off; managing agents is tucked behind a toggle. Hidden in overview.
+ * "Team HQ" — a glassy bottom-left card. Viewing only: agents, initiatives, metrics, approvals,
+ * and Talk. Authoring identity (rename, add/remove agents, edit team) lives in the Settings
+ * surface; the actions here deep-link into it. Hidden in the Nexus overview.
  */
 export function TeamInfoPanel() {
   const team = useNetworkStore((s) => s.teams.find((c) => c.id === s.focusedTeamId) ?? null);
@@ -49,25 +32,29 @@ export function TeamInfoPanel() {
         <TeamView team={team} onSelect={(id) => selectAgent(team.id, id)} />
       )}
 
-      <p className="mt-3 text-[10px] leading-snug text-white/35">
-        Click empty space to zoom out · click Jova to talk
-      </p>
+      <p className="mt-3 text-[10px] leading-snug text-white/35">Click empty space to zoom out · click Jova to talk</p>
     </div>
   );
 }
 
 function TeamView({ team, onSelect }: { team: Team; onSelect: (agentId: string) => void }) {
-  const addAgent = useNetworkStore((s) => s.addAgent);
   const resolveApproval = useNetworkStore((s) => s.resolveApproval);
   const metricsWindow = useNetworkStore((s) => s.metricsWindow);
+  const openTeam = useSettingsStore((s) => s.openTeam);
   const [approvalsOpen, setApprovalsOpen] = useState(false);
-  const [manageOpen, setManageOpen] = useState(false);
 
   const pm = team.agents.find((a) => a.role === "pm");
 
   return (
     <>
       <Header team={team} />
+
+      <button
+        onClick={() => openTeam(team.id)}
+        className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70 transition hover:bg-white/10"
+      >
+        ✎ Edit team identity
+      </button>
 
       {/* financials — windowed (1D/3D/7D/1M/All) */}
       <WindowPills />
@@ -135,9 +122,7 @@ function TeamView({ team, onSelect }: { team: Team; onSelect: (agentId: string) 
             >
               <span className="flex items-center gap-1.5">
                 <Dot color={team.color} on={a.tasks.length > 0} />
-                <span className={a.role === "pm" ? "font-medium text-white/90" : "text-white/75"}>
-                  {a.label}
-                </span>
+                <span className={a.role === "pm" ? "font-medium text-white/90" : "text-white/75"}>{a.label}</span>
               </span>
               <span className="text-[10px] text-white/45">
                 {a.tasks.length > 0 ? `${a.tasks.length} task${a.tasks.length === 1 ? "" : "s"}` : "idle"}
@@ -147,52 +132,18 @@ function TeamView({ team, onSelect }: { team: Team; onSelect: (agentId: string) 
           </li>
         ))}
       </ul>
-
-      {/* manage — tucked behind a toggle so it never clutters */}
-      <button
-        onClick={() => setManageOpen((v) => !v)}
-        className="mt-2 text-[10px] uppercase tracking-wider text-white/35 transition hover:text-white/60"
-      >
-        {manageOpen ? "▾ Manage" : "▸ Manage"}
-      </button>
-      {manageOpen && (
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {ADDABLE.map((r) => (
-            <button
-              key={r.role}
-              onClick={() => addAgent(team.id, r.role, r.label)}
-              className="rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-white/70 transition hover:bg-white/10"
-            >
-              + {r.label}
-            </button>
-          ))}
-        </div>
-      )}
     </>
   );
 }
 
 function AgentDetail({ team, agent, onBack }: { team: Team; agent: AgentNode; onBack: () => void }) {
-  const removeAgent = useNetworkStore((s) => s.removeAgent);
   const setTalkingAgent = useNetworkStore((s) => s.setTalkingAgent);
-  const renameAgentId = useNetworkStore((s) => s.renameAgentId);
-  const setRenameAgent = useNetworkStore((s) => s.setRenameAgent);
-  const renameAgent = useNetworkStore((s) => s.renameAgent);
   const openChatWith = useJovaStore((s) => s.openChatWith);
-  const editing = renameAgentId === agent.id;
-  const [draft, setDraft] = useState(agent.label);
-  useEffect(() => {
-    if (editing) setDraft(agent.label);
-  }, [editing, agent.id, agent.label]);
+  const openAgent = useSettingsStore((s) => s.openAgent);
 
   const talk = () => {
     setTalkingAgent(agent.id);
     openChatWith({ teamId: team.id, agentId: agent.id, teamName: team.name, label: agent.label, color: team.color });
-  };
-  const saveRename = () => {
-    const v = draft.trim();
-    if (v) renameAgent(team.id, agent.id, v);
-    setRenameAgent(null);
   };
 
   return (
@@ -203,38 +154,15 @@ function AgentDetail({ team, agent, onBack }: { team: Team; agent: AgentNode; on
 
       <div className="mb-3 flex items-center gap-2">
         <Dot color={team.color} on={agent.tasks.length > 0} />
-        {editing ? (
-          <div className="flex flex-1 items-center gap-1">
-            <input
-              autoFocus
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveRename();
-                if (e.key === "Escape") setRenameAgent(null);
-              }}
-              className="min-w-0 flex-1 rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-sm text-white outline-none focus:border-white/30"
-            />
-            <button onClick={saveRename} title="Save" className="rounded px-1.5 py-0.5 text-xs text-emerald-300/80 transition hover:bg-white/10">
-              ✓
-            </button>
-            <button onClick={() => setRenameAgent(null)} title="Cancel" className="rounded px-1.5 py-0.5 text-xs text-white/50 transition hover:bg-white/10">
-              ✕
-            </button>
-          </div>
-        ) : (
-          <>
-            <span className="flex-1 truncate text-sm font-semibold" style={{ color: team.color }}>
-              {agent.label}
-            </span>
-            <button onClick={talk} title="Talk" className="rounded px-1.5 py-1 text-sm text-white/60 transition hover:bg-white/10">
-              💬
-            </button>
-            <button onClick={() => setRenameAgent(agent.id)} title="Rename" className="rounded px-1.5 py-1 text-sm text-white/60 transition hover:bg-white/10">
-              ✎
-            </button>
-          </>
-        )}
+        <span className="flex-1 truncate text-sm font-semibold" style={{ color: team.color }}>
+          {agent.label}
+        </span>
+        <button onClick={talk} title="Talk" className="rounded px-1.5 py-1 text-sm text-white/60 transition hover:bg-white/10">
+          💬
+        </button>
+        <button onClick={() => openAgent(team.id, agent.id)} title="Edit identity" className="rounded px-1.5 py-1 text-sm text-white/60 transition hover:bg-white/10">
+          ✎
+        </button>
       </div>
 
       <Section label="Working on" />
@@ -243,7 +171,9 @@ function AgentDetail({ team, agent, onBack }: { team: Team; agent: AgentNode; on
           {agent.tasks.map((t) => (
             <li key={t.id} className="flex items-center justify-between gap-2 text-[11px]">
               <span className="truncate text-white/75">{t.title}</span>
-              <span className="shrink-0 text-[10px] text-white/45">{t.steps} step{t.steps === 1 ? "" : "s"}</span>
+              <span className="shrink-0 text-[10px] text-white/45">
+                {t.steps} step{t.steps === 1 ? "" : "s"}
+              </span>
             </li>
           ))}
         </ul>
@@ -262,18 +192,6 @@ function AgentDetail({ team, agent, onBack }: { team: Team; agent: AgentNode; on
         </ul>
       ) : (
         <p className="text-[11px] text-white/40">Nothing yet.</p>
-      )}
-
-      {agent.role !== "pm" && (
-        <button
-          onClick={() => {
-            removeAgent(team.id, agent.id);
-            onBack();
-          }}
-          className="mt-3 text-[10px] text-rose-300/60 transition hover:text-rose-300/90"
-        >
-          Remove agent
-        </button>
       )}
     </>
   );

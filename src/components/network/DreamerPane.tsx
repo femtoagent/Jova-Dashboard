@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
 import { useJovaStore } from "@/lib/state/useJovaStore";
+import { useHistoryStore } from "@/lib/logs/useHistoryStore";
 import type { Dream } from "@/lib/network/types";
 import { NEXUS_CHAT_TARGET } from "@/lib/jova/types";
 
@@ -30,19 +31,33 @@ export function DreamerPane() {
   const ask = (d: Dream) => {
     askDream(d.id); // focuses the team + selects its PM + sets the orb talking (no-op for Nexus)
     let sid: string | null = null;
+    let who = "Jova";
+    let recTeamId: string | undefined;
+    let recAgentId: string | undefined;
     if (d.teamId) {
       const team = teams.find((t) => t.id === d.teamId);
       const pm = team?.agents.find((a) => a.role === "pm");
-      if (team && pm) sid = openChatWith({ teamId: team.id, agentId: pm.id, teamName: team.name, label: pm.label, color: team.color });
+      if (team && pm) {
+        who = `${team.name} - ${pm.label}`;
+        recTeamId = team.id;
+        recAgentId = pm.id;
+        sid = openChatWith({ teamId: team.id, agentId: pm.id, teamName: team.name, label: pm.label, color: team.color });
+      }
     } else {
+      who = `${NEXUS_CHAT_TARGET.teamName} - ${NEXUS_CHAT_TARGET.label}`;
+      recTeamId = NEXUS_CHAT_TARGET.teamId;
+      recAgentId = NEXUS_CHAT_TARGET.agentId;
       sid = openChatWith(NEXUS_CHAT_TARGET); // Nexus dream → talk to Nexus
     }
-    // seed the conversation with the dream so you have the context as the first message
-    if (sid) addMessage(sid, { id: crypto.randomUUID(), role: "assistant", content: d.text, createdAt: Date.now(), kind: "dream" });
+    // seed the conversation with the dream as context + log it to durable history
+    if (sid) {
+      addMessage(sid, { id: crypto.randomUUID(), role: "assistant", content: d.text, createdAt: Date.now(), kind: "dream" });
+      useHistoryStore.getState().record({ ts: Date.now(), sessionId: sid, who, teamId: recTeamId, agentId: recAgentId, role: "assistant", content: d.text, kind: "dream" });
+    }
   };
 
   return (
-    <div className="fixed right-4 top-4 z-10 flex flex-col items-end gap-2">
+    <div className="fixed right-4 top-20 z-10 flex flex-col items-end gap-2">
       {/* the dream cloud — glows + counts when there are dreams; click to open the feed */}
       <button
         onClick={() => setOpen((o) => !o)}

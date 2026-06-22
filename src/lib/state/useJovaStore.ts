@@ -162,7 +162,7 @@ export const useJovaStore = create<JovaState>((set, get) => ({
     }
     const id = crypto.randomUUID();
     const now = Date.now();
-    const session: ChatSession = { id, title: `${target.teamName} · ${target.label}`, createdAt: now, updatedAt: now, target };
+    const session: ChatSession = { id, title: `${target.teamName} - ${target.label}`, createdAt: now, updatedAt: now, target };
     set((s) => ({ sessions: [...s.sessions, session], activeSessionId: id, messages: { ...s.messages, [id]: [] }, chatOpen: true }));
     return id;
   },
@@ -220,9 +220,9 @@ export const useJovaStore = create<JovaState>((set, get) => ({
     set((st) => ({
       sessions: st.sessions.map((s) => {
         if (s.target?.teamId !== teamId || s.target?.agentId !== agentId) return s;
-        // refresh the auto-generated "Team · Role" title too, but leave user-distinct titles ("New chat") alone
-        const autoTitle = `${s.target.teamName} · ${s.target.label}`;
-        const title = s.title === autoTitle ? `${s.target.teamName} · ${label}` : s.title;
+        // refresh the auto-generated "Team - Role" title too, but leave user-distinct titles ("New chat") alone
+        const autoTitle = `${s.target.teamName} - ${s.target.label}`;
+        const title = s.title === autoTitle ? `${s.target.teamName} - ${label}` : s.title;
         return { ...s, title, target: { ...s.target, label } };
       }),
     })),

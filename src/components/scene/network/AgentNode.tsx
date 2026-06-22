@@ -7,6 +7,7 @@ import { Html } from "@react-three/drei";
 import { getGlowTexture } from "../textures";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
 import { useJovaStore } from "@/lib/state/useJovaStore";
+import { useSettingsStore } from "@/lib/settings/useSettingsStore";
 import type { AgentNode as AgentNodeT } from "@/lib/network/types";
 
 /** Tiny deterministic PRNG so a chain's base shape is stable for the life of its task. */
@@ -67,8 +68,8 @@ export function AgentNode({
   const setTalkingAgent = useNetworkStore((s) => s.setTalkingAgent);
   const radialAgentId = useNetworkStore((s) => s.radialAgentId);
   const setRadialAgent = useNetworkStore((s) => s.setRadialAgent);
-  const setRenameAgent = useNetworkStore((s) => s.setRenameAgent);
   const openChatWith = useJovaStore((s) => s.openChatWith);
+  const openAgent = useSettingsStore((s) => s.openAgent);
 
   // one chain per task (length = steps); idle → two short stubs. Seeded per task.id (stable shape).
   const chains = agent.tasks.length
@@ -164,10 +165,13 @@ export function AgentNode({
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     ping.current = 1; // quick bump so the click visibly registers on the orb
-    // focused on the team: clicking the orb pops a radial menu. From the overview a tiny agent
-    // click just flies into its team.
-    if (focused) setRadialAgent(radialAgentId === agent.id ? null : agent.id);
-    else focusTeam(teamId);
+    // focused: clicking the orb shows the agent in the bottom-left panel and toggles its quick menu.
+    // from the overview a tiny agent click just flies into its team.
+    if (focused) {
+      const wasOpen = radialAgentId === agent.id;
+      selectAgent(teamId, agent.id); // show this agent in the bottom-left panel (clears radials)
+      if (!wasOpen) setRadialAgent(agent.id); // (re)open the in-scene quick menu unless toggling it off
+    } else focusTeam(teamId);
   };
   const onOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -234,13 +238,12 @@ export function AgentNode({
                   openChatWith({ teamId, agentId: agent.id, teamName, label: agent.label, color });
                 },
               },
-              { icon: "📋", label: "Tasks", action: () => selectAgent(teamId, agent.id) },
               {
                 icon: "✎",
-                label: "Rename",
+                label: "Edit",
                 action: () => {
-                  selectAgent(teamId, agent.id);
-                  setRenameAgent(agent.id);
+                  setRadialAgent(null);
+                  openAgent(teamId, agent.id);
                 },
               },
             ].map((o, i, arr) => {

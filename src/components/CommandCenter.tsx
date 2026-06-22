@@ -10,6 +10,8 @@ import { DemoControls } from "@/components/demo/DemoControls";
 import { TeamInfoPanel } from "@/components/network/TeamInfoPanel";
 import { NexusInfoPanel } from "@/components/network/NexusInfoPanel";
 import { DreamerPane } from "@/components/network/DreamerPane";
+import { SettingsGear } from "@/components/settings/SettingsGear";
+import { SettingsOverlay } from "@/components/settings/SettingsOverlay";
 
 // 3D world is client-only.
 const SceneCanvas = dynamic(() => import("@/components/scene/SceneCanvas"), { ssr: false });
@@ -45,6 +47,8 @@ export function CommandCenter() {
         <DreamerPane />
         <TeamInfoPanel />
         <ChatSurface />
+        <SettingsGear />
+        <SettingsOverlay />
       </main>
     </AuthGate>
   );

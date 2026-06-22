@@ -6,6 +6,33 @@
 
 export type AgentRole = "pm" | "developer" | "qa" | "devops" | "marketing" | "cx";
 
+/** The backend "client" an agent runs on. Net-new; today everything is mock/Letta. */
+export type AgentClient = "hermes" | "letta" | "openclaw";
+
+/**
+ * An app / API key the agent has access to. The real secret is NEVER stored client-side — only a
+ * masked hint + what it's for. (When the backend lands, the secret lives in a server-side vault.)
+ */
+export interface AccessGrant {
+  id: string;
+  /** the app / service this connects to — i.e. what the key is for */
+  app: string;
+  /** masked hint of the key (e.g. "sk-…a1b2"); absent = an app linked without a key */
+  keyHint?: string;
+}
+
+/**
+ * One node in an agent's read-only "memory web" (display-only for now). Future-maps to Letta
+ * memory blocks: persona_core / persona_growth / human / affect, plus free-form facts.
+ */
+export interface MemoryNode {
+  id: string;
+  label: string;
+  kind: "persona_core" | "persona_growth" | "human" | "affect" | "fact";
+  /** ids of related nodes — undirected links for the web layout */
+  links: string[];
+}
+
 export interface AgentTask {
   id: string;
   title: string;
@@ -25,6 +52,22 @@ export interface AgentNode {
   tasks: AgentTask[];
   /** recently completed task titles (most recent first, capped) */
   recent: string[];
+
+  // ---- identity (authored in the Settings → Agent editor; all optional, defaulted in the factory) ----
+  /** which backend client this agent runs on */
+  client?: AgentClient;
+  /** OpenRouter routing preset id (free text until the server supplies a real list) */
+  openRouterPreset?: string;
+  /** the agent's persona prose — can be authored by Nexus from a prompt */
+  soul?: string;
+  /** tool names this agent may use */
+  tools?: string[];
+  /** skills (role-dependent) */
+  skills?: string[];
+  /** read-only memory web (display only for now) */
+  memory?: MemoryNode[];
+  /** apps / API keys this agent has access to (secrets masked) */
+  access?: AccessGrant[];
 }
 
 export interface TeamMetrics {
@@ -59,6 +102,12 @@ export interface Team {
   approvals: Approval[];
   /** how long the team has been live (days); deletable only while ≤ 3 */
   ageDays: number;
+
+  // ---- identity (authored in the Settings → Team editor; optional, defaulted to "") ----
+  /** the team's mission statement */
+  mission?: string;
+  /** what the team is solving for */
+  solvingFor?: string;
 }
 
 /**

@@ -5,6 +5,8 @@ import { useJovaStore } from "@/lib/state/useJovaStore";
 import { streamChat } from "@/lib/jova/client";
 import { ARRIVAL } from "@/lib/jova/mock";
 import { setSpeaking } from "@/lib/audio/amplitude";
+import { useHistoryStore } from "@/lib/logs/useHistoryStore";
+import { useLogStore } from "@/lib/logs/useLogStore";
 
 /**
  * Orchestrates a full turn: user message -> stream Jova's reply -> drive wisp state + mood.
@@ -22,6 +24,11 @@ export function useConversation() {
     store.touch();
 
     const sessionId = store.activeSessionId ?? store.createSession();
+    // who this thread is with, for the durable chat-history log
+    const sess = useJovaStore.getState().sessions.find((x) => x.id === sessionId);
+    const who = sess?.target ? `${sess.target.teamName} - ${sess.target.label}` : "Jova";
+    const teamId = sess?.target?.teamId;
+    const agentId = sess?.target?.agentId;
 
     if (!arrival) {
       store.addMessage(sessionId, {
@@ -30,6 +37,15 @@ export function useConversation() {
         content: trimmed,
         createdAt: Date.now(),
         image,
+      });
+      useHistoryStore.getState().record({
+        ts: Date.now(),
+        sessionId,
+        who,
+        teamId,
+        agentId,
+        role: "user",
+        content: trimmed || (image ? "[image attached]" : ""),
       });
     }
 
@@ -74,7 +90,22 @@ export function useConversation() {
       });
     } finally {
       const s = useJovaStore.getState();
+      const finalMsg = s.messages[sessionId]?.find((m) => m.id === assistantId);
       s.finalizeMessage(sessionId, assistantId);
+      // durable history (survives closeSession). skip the unprompted arrival greeting + empty bodies.
+      if (!arrival && finalMsg?.content?.trim()) {
+        useHistoryStore.getState().record({
+          ts: Date.now(),
+          sessionId,
+          who,
+          teamId,
+          agentId,
+          role: "assistant",
+          content: finalMsg.content,
+          reasoning: finalMsg.reasoning,
+        });
+      }
+      useLogStore.getState().addLog({ kind: "server", source: "/api/chat", message: "POST /api/chat → 200" });
       setSpeaking(false);
       // back to present (hovering near) after speaking; idle timer takes it from here
       s.setWispState("present");

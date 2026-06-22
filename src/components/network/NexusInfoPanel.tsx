@@ -2,6 +2,7 @@
 
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
 import { useJovaStore } from "@/lib/state/useJovaStore";
+import { useSettingsStore } from "@/lib/settings/useSettingsStore";
 import { NEXUS_CHAT_TARGET } from "@/lib/jova/types";
 import { WindowPills, MetricRows } from "./metrics";
 import { rollup, scaleMetrics, net as netOf } from "@/lib/network/ledger";
@@ -16,9 +17,8 @@ export function NexusInfoPanel() {
   const teams = useNetworkStore((s) => s.teams);
   const metricsWindow = useNetworkStore((s) => s.metricsWindow);
   const focusTeam = useNetworkStore((s) => s.focusTeam);
-  const addTeam = useNetworkStore((s) => s.addTeam);
-  const removeTeam = useNetworkStore((s) => s.removeTeam);
   const openChatWith = useJovaStore((s) => s.openChatWith);
+  const openSettings = useSettingsStore((s) => s.openSettings);
   if (focusedTeamId) return null; // the Team HQ panel takes over when one is focused
 
   const totals = rollup(teams, metricsWindow);
@@ -48,10 +48,10 @@ export function NexusInfoPanel() {
           const n = netOf(scaleMetrics(c.metrics, metricsWindow, c.ageDays));
           const needs = c.approvals.length > 0;
           return (
-            <li key={c.id} className="flex items-center gap-1">
+            <li key={c.id}>
               <button
                 onClick={() => focusTeam(c.id)}
-                className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition hover:bg-white/10"
+                className="flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition hover:bg-white/10"
               >
                 <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: c.color, boxShadow: `0 0 8px ${c.color}` }} />
                 <span className="truncate text-white/80">{c.name}</span>
@@ -60,27 +60,16 @@ export function NexusInfoPanel() {
                   {n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(2)}
                 </span>
               </button>
-              {c.ageDays <= 3 ? (
-                <button
-                  onClick={() => removeTeam(c.id)}
-                  title={`Delete ${c.name} (allowed while ≤ 3 days old)`}
-                  className="shrink-0 rounded px-1 text-[11px] text-rose-300/50 transition hover:text-rose-300/90"
-                >
-                  ✕
-                </button>
-              ) : (
-                <span className="w-3 shrink-0" />
-              )}
             </li>
           );
         })}
       </ul>
 
       <button
-        onClick={addTeam}
+        onClick={openSettings}
         className="mt-2 w-full rounded-md border border-cyan-300/25 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-50 transition hover:bg-cyan-400/20"
       >
-        + Add team
+        Manage teams
       </button>
 
       <p className="mt-3 text-[10px] leading-snug text-white/35">Click a team to fly there · click Jova to talk</p>

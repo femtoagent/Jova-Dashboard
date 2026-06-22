@@ -37,7 +37,7 @@ export function SessionsView({ onBack }: { onBack: () => void }) {
   const active = sessions.find((s) => s.id === activeId) ?? null;
   const key = active ? personKey(active) : "jova";
   const currentTarget = active?.target;
-  const personName = currentTarget ? `${currentTarget.teamName} · ${currentTarget.label}` : "Jova";
+  const personName = currentTarget ? `${currentTarget.teamName} - ${currentTarget.label}` : "Jova";
   const threads = sessions.filter((s) => personKey(s) === key).sort((a, b) => b.updatedAt - a.updatedAt);
   const c = currentTarget?.color ?? "#67e8f9";
 

@@ -19,14 +19,26 @@ body {
   overflow: hidden;
 }
 
+/* Y-only entrance — must NOT translate X. Tailwind v4's `-translate-x-1/2` uses the separate
+   `translate` property, so any X here would stack with it and shift the element before snapping. */
 @keyframes fadein {
   from {
     opacity: 0;
-    transform: translate(-50%, 10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translateY(0);
+  }
+}
+
+/* plain opacity fade (no transform) — used by the full-screen settings overlay + dialogs */
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

@@ -67,3 +67,56 @@ export async function streamChat(params: {
     }
   }
 }
+
+/**
+ * Ask Nexus to write an agent "soul" from a prompt. Reuses the same NDJSON `ChatStreamEvent`
+ * contract as chat (token/done/error), POSTing to the BFF route /api/nexus/soul.
+ */
+export async function streamSoul(params: {
+  prompt: string;
+  role?: string;
+  name?: string;
+  signal?: AbortSignal;
+  onEvent: (e: ChatStreamEvent) => void;
+}): Promise<void> {
+  const res = await fetch("/api/nexus/soul", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: params.prompt, role: params.role, name: params.name }),
+    signal: params.signal,
+  });
+
+  if (!res.ok || !res.body) {
+    params.onEvent({ type: "error", message: `soul ${res.status}` });
+    params.onEvent({ type: "done" });
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      try {
+        params.onEvent(JSON.parse(line) as ChatStreamEvent);
+      } catch {
+        /* ignore malformed line */
+      }
+    }
+  }
+  const tail = buf.trim();
+  if (tail) {
+    try {
+      params.onEvent(JSON.parse(tail) as ChatStreamEvent);
+    } catch {
+      /* ignore */
+    }
+  }
+}

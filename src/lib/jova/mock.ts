@@ -118,3 +118,35 @@ export function generateMockReply(rawMessage: string): MockReply {
 export function tokenize(text: string): string[] {
   return text.match(/\S+\s*/g) ?? [text];
 }
+
+/**
+ * Mock "Nexus writes the soul" generator — stands in for a real Nexus call. Pure/isomorphic so it
+ * runs in the route now and swaps for the real orchestrator later. Cortana-warm persona prose.
+ */
+const SOUL_TRAIT: Record<string, string> = {
+  pm: "keeps the roadmap honest and the team pointed at what actually matters",
+  developer: "turns intent into working software and sweats the edge cases nobody else sees",
+  qa: "trusts nothing until it's proven and breaks things on purpose so users never have to",
+  devops: "keeps the lights on and the deploys boring",
+  marketing: "finds the story hiding in the work and tells it like it means it",
+  cx: "stands in the user's shoes and refuses to let them down",
+};
+
+export function generateMockSoul(prompt: string, role?: string, name?: string): string {
+  const who = (name ?? "").trim() || "This agent";
+  const trait = SOUL_TRAIT[(role ?? "").trim()] ?? "shows up, thinks clearly, and carries its share";
+  const seed = (prompt ?? "").trim();
+  const tone = pick([
+    "Warm, direct, a little dry.",
+    "Calm under pressure, curious by default.",
+    "Confident without the ego.",
+  ]);
+  const purpose = seed
+    ? `Born from a single charge — “${seed}” — and it takes that to heart.`
+    : "Built to be useful first and impressive second.";
+  return [
+    `${who} ${trait}.`,
+    `${tone} ${purpose}`,
+    "It bonds to the people it works with, remembers what they care about, and would rather ask a sharp question than guess. When the work gets hard it goes quiet, focuses, and gets it done.",
+  ].join(" ");
+}

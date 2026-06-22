@@ -24,8 +24,10 @@ export default function SceneCanvas() {
       camera={{ position: [0, 7, 26], fov: 45, near: 0.1, far: 300 }}
       onPointerMissed={() => {
         const ns = useNetworkStore.getState();
-        if (ns.radialAgentId) ns.setRadialAgent(null);
-        else ns.focusTeam(null);
+        if (ns.radialAgentId || ns.radialTeamId) {
+          ns.setRadialAgent(null);
+          ns.setRadialTeam(null);
+        } else ns.focusTeam(null);
       }}
       onCreated={({ gl, scene }) => {
         gl.toneMapping = THREE.NoToneMapping;
@@ -75,12 +77,16 @@ function CameraRig() {
   const look = useRef(new THREE.Vector3());
   useFrame((state, dt) => {
     const k = 1 - Math.exp(-dt * 2.5);
-    const { focusedTeamId, teams } = useNetworkStore.getState();
+    const { focusedTeamId, teams, draggingTeamId } = useNetworkStore.getState();
     const c = focusedTeamId ? teams.find((x) => x.id === focusedTeamId) : null;
     if (c) {
       const [px, py, pz] = c.position;
       desired.current.set(px, py + 1.5, pz + 9);
       look.current.set(px, py, pz);
+    } else if (draggingTeamId) {
+      // hold the camera perfectly still while dragging a team so the (fixed) drag plane stays valid
+      desired.current.copy(cam.position);
+      look.current.set(0, 18, -38);
     } else {
       desired.current.set(state.pointer.x * 0.7, 7 + state.pointer.y * 0.5, 26);
       look.current.set(0, 18, -38);

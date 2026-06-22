@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
+import { useSettingsStore } from "@/lib/settings/useSettingsStore";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { ConversationRail } from "./ConversationRail";
@@ -25,8 +26,11 @@ export function ChatSurface() {
   const closeSession = useJovaStore((s) => s.closeSession);
   const totalUnread = useJovaStore((s) => Object.values(s.unread).reduce((a, b) => a + b, 0));
   const target = useJovaStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.target ?? null);
+  const openAgent = useSettingsStore((s) => s.openAgent);
   const isJova = !target;
   const accent = target?.color ?? "#67e8f9";
+  // a real team agent (not Jova, not the Nexus orchestrator) can deep-link to its settings screen
+  const editableAgent = target && target.teamId !== "nexus";
 
   const [height, setHeight] = useState(DEFAULT_H);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
@@ -94,9 +98,20 @@ export function ChatSurface() {
           <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
             <div className="flex min-w-0 items-center gap-2">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accent, boxShadow: `0 0 6px ${accent}` }} />
-              <span className="truncate text-sm font-semibold" style={{ color: target ? accent : "#a5f3fc" }}>
-                {target ? `${target.teamName} · ${target.label}` : "Jova"}
-              </span>
+              {editableAgent ? (
+                <button
+                  onClick={() => openAgent(target.teamId, target.agentId)}
+                  title="Open this agent's settings"
+                  className="truncate text-sm font-semibold transition hover:underline"
+                  style={{ color: accent }}
+                >
+                  {`${target.teamName} - ${target.label}`}
+                </button>
+              ) : (
+                <span className="truncate text-sm font-semibold" style={{ color: target ? accent : "#a5f3fc" }}>
+                  {target ? `${target.teamName} - ${target.label}` : "Jova"}
+                </span>
+              )}
               {!isJova && <span className="shrink-0 text-[10px] text-white/35">text</span>}
             </div>
 
