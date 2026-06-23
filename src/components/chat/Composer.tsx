@@ -4,59 +4,84 @@ import { useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useConversation } from "@/lib/conversation/useConversation";
 
+/** Read a File into a base64 data URL — serves both the inline preview and the server upload
+ *  (a blob: object URL is browser-only and useless past the BFF). Shared with the chat drag-and-drop. */
+export function fileToDataUrl(f: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(typeof r.result === "string" ? r.result : "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(f);
+  });
+}
+
 export function Composer() {
   const [text, setText] = useState("");
-  const [image, setImage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { send } = useConversation();
   const micOn = useJovaStore((s) => s.micOn);
   const target = useJovaStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.target ?? null);
+  // attachments are shared in the store so the chat drag-and-drop can stage them too
+  const pendingImage = useJovaStore((s) => s.pendingImage);
+  const pendingFile = useJovaStore((s) => s.pendingFile);
+  const setPendingImage = useJovaStore((s) => s.setPendingImage);
+  const setPendingFile = useJovaStore((s) => s.setPendingFile);
+  const clearPending = useJovaStore((s) => s.clearPending);
 
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) setImage((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(f);
-    });
     e.target.value = "";
+    if (!f) return;
+    const dataUrl = await fileToDataUrl(f);
+    if (f.type.startsWith("image/")) setPendingImage(dataUrl);
+    else setPendingFile({ name: f.name, mime: f.type || "application/octet-stream", dataUrl });
   };
+
   const submit = () => {
     const t = text.trim();
-    if (!t && !image) return;
-    const img = image;
+    if (!t && !pendingImage && !pendingFile) return;
+    const image = pendingImage ?? undefined;
+    const file = pendingFile ?? undefined;
     setText("");
-    setImage(null);
-    void send(t, { image: img ?? undefined });
+    clearPending();
+    void send(t, { image, file });
   };
 
   return (
     <div className="px-3 pb-3 pt-2">
-      {image && (
-        <div className="mb-2 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-1 pr-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={image} alt="attachment" className="h-10 w-10 rounded object-cover" />
-          <span className="text-[11px] text-white/50">image attached</span>
-          <button
-            onClick={() => {
-              if (image) URL.revokeObjectURL(image);
-              setImage(null);
-            }}
-            title="Remove"
-            className="text-white/40 transition hover:text-rose-300"
-          >
-            ×
-          </button>
+      {(pendingImage || pendingFile) && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          {pendingImage && (
+            <div className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-1 pr-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={pendingImage} alt="attachment" className="h-10 w-10 rounded object-cover" />
+              <span className="text-[11px] text-white/50">image</span>
+              <button onClick={() => setPendingImage(null)} title="Remove" className="text-white/40 transition hover:text-rose-300">
+                ×
+              </button>
+            </div>
+          )}
+          {pendingFile && (
+            <div className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5">
+              <span className="text-base">📄</span>
+              <span className="max-w-[180px] truncate text-[11px] text-white/60">{pendingFile.name}</span>
+              <span className="text-[10px] text-white/30">→ vault</span>
+              <button onClick={() => setPendingFile(null)} title="Remove" className="text-white/40 transition hover:text-rose-300">
+                ×
+              </button>
+            </div>
+          )}
         </div>
       )}
       <div className="flex items-end gap-2">
         <button
           onClick={() => fileRef.current?.click()}
-          title="Attach an image (for the agent to process)"
+          title="Attach an image or a file (or drag it onto the chat)"
           className="h-[44px] shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 text-lg text-white/60 transition hover:bg-white/10"
         >
-          🖼
+          📎
         </button>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+        <input ref={fileRef} type="file" className="hidden" onChange={onPick} />
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}

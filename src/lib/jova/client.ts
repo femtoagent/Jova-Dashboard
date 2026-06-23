@@ -22,13 +22,22 @@ export async function health(): Promise<HealthResult> {
 export async function streamChat(params: {
   sessionId: string;
   message: string;
+  /** optional image attachment as a data URL (data:<mime>;base64,…) — seen inline by the vision model */
+  image?: string;
+  /** optional non-image file — uploaded to the agent's vault folder to read */
+  file?: { name: string; mime: string; dataUrl: string };
   signal?: AbortSignal;
   onEvent: (e: ChatStreamEvent) => void;
 }): Promise<void> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId: params.sessionId, message: params.message }),
+    body: JSON.stringify({
+      sessionId: params.sessionId,
+      message: params.message,
+      image: params.image,
+      file: params.file,
+    }),
     signal: params.signal,
   });
 

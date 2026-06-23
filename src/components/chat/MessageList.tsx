@@ -47,6 +47,12 @@ export function MessageList() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={m.image} alt="attachment" className="mb-1.5 block max-h-44 rounded-lg border border-white/10 object-contain" />
               )}
+              {m.file && (
+                <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[12px] text-white/70">
+                  <span>📄</span>
+                  <span className="max-w-[220px] truncate">{m.file.name}</span>
+                </div>
+              )}
               {m.content}
               {m.streaming && <span className="ml-0.5 inline-block animate-pulse text-cyan-300">▍</span>}
             </div>

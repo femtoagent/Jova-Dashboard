@@ -55,6 +55,9 @@ interface JovaState {
   voiceOn: boolean; // TTS (her voice out) — wired in Phase 4
   micOn: boolean; // STT (mic in) — wired in Phase 4
   lastInteraction: number;
+  /** staged attachments for the next message — set by the composer picker OR chat drag-and-drop */
+  pendingImage: string | null;
+  pendingFile: { name: string; mime: string; dataUrl: string } | null;
 
   // ---- scene actions ----
   setWispType: (t: WispType) => void;
@@ -91,6 +94,9 @@ interface JovaState {
   setChatOpen: (open: boolean) => void;
   toggleVoice: () => void;
   toggleMic: () => void;
+  setPendingImage: (dataUrl: string | null) => void;
+  setPendingFile: (f: { name: string; mime: string; dataUrl: string } | null) => void;
+  clearPending: () => void;
 
   /** Register interaction; if she had receded, bring her back. */
   touch: () => void;
@@ -148,6 +154,8 @@ export const useJovaStore = create<JovaState>((set, get) => ({
   voiceOn: false,
   micOn: false,
   lastInteraction: Date.now(),
+  pendingImage: null,
+  pendingFile: null,
 
   setWispType: (t) => set({ wispType: t }),
   setWispState: (s) => set({ wispState: s }),
@@ -342,6 +350,9 @@ export const useJovaStore = create<JovaState>((set, get) => ({
     ),
   toggleVoice: () => set((st) => ({ voiceOn: !st.voiceOn })),
   toggleMic: () => set((st) => ({ micOn: !st.micOn })),
+  setPendingImage: (dataUrl) => set({ pendingImage: dataUrl }),
+  setPendingFile: (f) => set({ pendingFile: f }),
+  clearPending: () => set({ pendingImage: null, pendingFile: null }),
 
   touch: () =>
     set((st) => ({

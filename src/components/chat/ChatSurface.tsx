@@ -4,7 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useSettingsStore } from "@/lib/settings/useSettingsStore";
 import { MessageList } from "./MessageList";
-import { Composer } from "./Composer";
+import { Composer, fileToDataUrl } from "./Composer";
 import { ConversationRail } from "./ConversationRail";
 
 const DEFAULT_H = 440;
@@ -32,9 +32,25 @@ export function ChatSurface() {
   // a real team agent (not Jova, not the Nexus orchestrator) can deep-link to its settings screen
   const editableAgent = target && target.teamId !== "nexus";
 
+  const setPendingImage = useJovaStore((s) => s.setPendingImage);
+  const setPendingFile = useJovaStore((s) => s.setPendingFile);
+
   const [height, setHeight] = useState(DEFAULT_H);
   const [railOpen, setRailOpen] = useState(true);
+  const [dragOver, setDragOver] = useState(false);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
+
+  // drop images/files anywhere on the chat → stage them as attachments (images go inline to the
+  // vision model; other files are uploaded to her vault). Reads to data URLs so they survive the BFF.
+  const onDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    for (const f of Array.from(e.dataTransfer.files)) {
+      const dataUrl = await fileToDataUrl(f);
+      if (f.type.startsWith("image/")) setPendingImage(dataUrl);
+      else setPendingFile({ name: f.name, mime: f.type || "application/octet-stream", dataUrl });
+    }
+  };
 
   const onHandleDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -158,7 +174,22 @@ export function ChatSurface() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div
+            className="relative min-h-0 flex-1 overflow-hidden"
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!dragOver) setDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false);
+            }}
+            onDrop={onDrop}
+          >
+            {dragOver && (
+              <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border-2 border-dashed border-cyan-300/60 bg-cyan-400/10 backdrop-blur-sm">
+                <span className="rounded-lg bg-black/50 px-3 py-1.5 text-sm text-cyan-100">Drop an image or file for Jova</span>
+              </div>
+            )}
             <MessageList />
           </div>
           <Composer />

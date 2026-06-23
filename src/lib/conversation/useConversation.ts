@@ -14,11 +14,12 @@ import { useLogStore } from "@/lib/logs/useLogStore";
  * (only the message content updates do, which is what we want).
  */
 export function useConversation() {
-  const send = useCallback(async (text: string, opts?: { arrival?: boolean; image?: string }) => {
+  const send = useCallback(async (text: string, opts?: { arrival?: boolean; image?: string; file?: { name: string; mime: string; dataUrl: string } }) => {
     const arrival = opts?.arrival ?? false;
     const image = opts?.image;
+    const file = opts?.file;
     const trimmed = text.trim();
-    if (!arrival && !trimmed && !image) return;
+    if (!arrival && !trimmed && !image && !file) return;
 
     const store = useJovaStore.getState();
     store.touch();
@@ -37,6 +38,7 @@ export function useConversation() {
         content: trimmed,
         createdAt: Date.now(),
         image,
+        file: file ? { name: file.name } : undefined,
       });
       useHistoryStore.getState().record({
         ts: Date.now(),
@@ -45,7 +47,7 @@ export function useConversation() {
         teamId,
         agentId,
         role: "user",
-        content: trimmed || (image ? "[image attached]" : ""),
+        content: trimmed || (image ? "[image attached]" : file ? `[file: ${file.name}]` : ""),
       });
     }
 
@@ -63,6 +65,8 @@ export function useConversation() {
       await streamChat({
         sessionId,
         message: arrival ? ARRIVAL : trimmed,
+        image,
+        file,
         onEvent: (e) => {
           const s = useJovaStore.getState();
           switch (e.type) {

@@ -13,8 +13,10 @@ export interface ChatMessage {
   reasoning?: string;
   /** a special message rendered distinctly — e.g. a dream carried into the chat as context */
   kind?: "dream";
-  /** an attached image (object/data URL) for the agent to process */
+  /** an attached image (data URL) for the agent to process */
   image?: string;
+  /** an attached non-image file (uploaded to her vault); we keep just the name for display */
+  file?: { name: string };
 }
 
 /** Who a chat session is addressed to — a team's agent. Absent on a session = Jova herself. */
