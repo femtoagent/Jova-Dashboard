@@ -21,6 +21,21 @@ const PASSWORD = process.env.LETTA_SERVER_PASSWORD ?? "";
 const AGENT_NAME = process.env.LETTA_AGENT_NAME ?? "jova";
 const VAULT_NAME = process.env.LETTA_VAULT_FOLDER ?? "jova-vault";
 
+// Per-agent preset routing (single-tenant). An agent's Letta model handle IS the routing signal the
+// proxy reads: handle `openai-proxy/<slug>` -> that preset; the bare deepseek handle -> the default
+// (jova-conversation). Keep KNOWN_PRESETS in sync with or_proxy.py's KNOWN_PRESETS.
+const KNOWN_PRESETS = ["jova-conversation", "file-medium", "image-light", "jova-memory"];
+const DEFAULT_MODEL = "deepseek/deepseek-v4-flash";
+const PROXY_ENDPOINT = process.env.LETTA_PROXY_ENDPOINT ?? "http://127.0.0.1:4000/v1";
+
+/** An agent and the preset its brain currently routes through. */
+export interface LettaAgentInfo {
+  id: string;
+  name: string;
+  /** the preset slug this agent routes to, or "" for the default (legacy deepseek handle). */
+  preset: string;
+}
+
 /** A non-image attachment: uploaded to Jova's vault folder so she can read it with her file tools. */
 export interface VaultFile {
   name: string;
@@ -77,6 +92,70 @@ async function resolveAgentId(): Promise<string> {
   throw new Error(`Letta agent "${AGENT_NAME}" not found at ${BASE}`);
 }
 
+/** Derive the preset slug an agent routes to from its llm_config (model id or handle suffix). */
+function presetFromLlmConfig(lc: Record<string, unknown> | undefined): string {
+  if (!lc) return "";
+  const model = String(lc.model ?? "");
+  if (KNOWN_PRESETS.includes(model)) return model;
+  const slug = String(lc.handle ?? "").split("/").pop() ?? "";
+  return KNOWN_PRESETS.includes(slug) ? slug : "";
+}
+
+/** List all Letta agents with the preset each currently routes through. */
+export async function listAgents(): Promise<LettaAgentInfo[]> {
+  const res = await fetch(`${BASE}/v1/agents/`, { headers: authHeaders(), cache: "no-store" });
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`Letta rejected the bearer token (${res.status}) — check LETTA_SERVER_PASSWORD`);
+  }
+  if (!res.ok) throw new Error(`Letta agents ${res.status}`);
+  const list = (await res.json().catch(() => null)) as Array<Record<string, unknown>> | null;
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((a) => ({
+      id: String(a.id ?? ""),
+      name: String(a.name ?? ""),
+      preset: presetFromLlmConfig(a.llm_config as Record<string, unknown> | undefined),
+    }))
+    .filter((a) => a.id);
+}
+
+/**
+ * Point an agent at a preset by rewriting only the routing fields of its llm_config to the proxy
+ * handle `openai-proxy/<slug>` (every other setting — context window, temperature… — is preserved).
+ * An empty/unknown slug resets it to the default deepseek handle (still through the proxy → the
+ * jova-conversation default). The proxy reads the handle and maps it to `@preset/<slug>`.
+ */
+export async function setAgentPreset(agentId: string, preset: string): Promise<LettaAgentInfo> {
+  const cur = await fetch(`${BASE}/v1/agents/${agentId}`, { headers: authHeaders(), cache: "no-store" });
+  if (!cur.ok) throw new Error(`Letta agent ${agentId} ${cur.status}`);
+  const agent = (await cur.json()) as Record<string, unknown>;
+  const lc = { ...((agent.llm_config as Record<string, unknown>) ?? {}) };
+
+  const slug = preset.trim();
+  const model = KNOWN_PRESETS.includes(slug) ? slug : DEFAULT_MODEL;
+  lc.model = model;
+  lc.handle = `openai-proxy/${model}`;
+  lc.model_endpoint = PROXY_ENDPOINT;
+  lc.model_endpoint_type = "openai";
+  lc.provider_name = null;
+  lc.provider_category = null;
+
+  const res = await fetch(`${BASE}/v1/agents/${agentId}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ llm_config: lc }),
+  });
+  if (!res.ok) {
+    throw new Error(`Letta preset update ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
+  }
+  const upd = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return {
+    id: agentId,
+    name: String(upd.name ?? agent.name ?? ""),
+    preset: presetFromLlmConfig((upd.llm_config as Record<string, unknown>) ?? lc),
+  };
+}
+
 /** Pull the displayable text out of an assistant message's content (string or typed parts). */
 function extractText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -102,8 +181,35 @@ const FATAL_STOPS = new Set([
   "context_window_overflow_in_system_prompt",
 ]);
 
-/** Translate one parsed SSE payload into ChatStreamEvents. Unknown/tool/usage/ping frames are ignored. */
-function emitFromMessage(msg: Record<string, unknown>, send: (e: ChatStreamEvent) => void) {
+/** Per-word typewriter pacing for revealing each step's message live. */
+const REVEAL_MS = 18;
+
+/** Split a complete message into word-sized reveal chunks. Whitespace boundaries never split a
+ *  multi-byte char, so the typewriter can't reintroduce the byte-split glyph. */
+function chunkForReveal(text: string): string[] {
+  return text.match(/\s*\S+|\s+/gu) ?? [];
+}
+
+/** Reveal one complete message word-by-word (a step's text types out live as it arrives). */
+async function revealText(text: string, send: (e: ChatStreamEvent) => void, signal?: AbortSignal): Promise<void> {
+  for (const piece of chunkForReveal(text)) {
+    if (signal?.aborted) return;
+    send({ type: "token", text: piece });
+    await new Promise((r) => setTimeout(r, REVEAL_MS));
+  }
+}
+
+/**
+ * Translate one parsed SSE payload into ChatStreamEvents, revealing each step's assistant message
+ * LIVE (word-by-word) as it arrives — so an intermediate message (e.g. a mid-turn question) shows
+ * immediately instead of being buffered until the whole turn finishes. Tool/usage/ping frames ignored.
+ */
+async function emitFromMessage(
+  msg: Record<string, unknown>,
+  send: (e: ChatStreamEvent) => void,
+  signal: AbortSignal | undefined,
+  state: { sawAssistant: boolean },
+): Promise<void> {
   const mt = (msg.message_type ?? (msg as { messageType?: string }).messageType ?? msg.type) as
     | string
     | undefined;
@@ -120,9 +226,13 @@ function emitFromMessage(msg: Record<string, unknown>, send: (e: ChatStreamEvent
       break;
     }
     case "assistant_message": {
-      // step streaming delivers the full, correctly-encoded reply as one content string
       const text = extractText(msg.content);
-      if (text) send({ type: "token", text });
+      if (text) {
+        // blank line between consecutive step messages in one turn so they don't run together
+        if (state.sawAssistant) send({ type: "token", text: "\n\n" });
+        state.sawAssistant = true;
+        await revealText(text, send, signal);
+      }
       break;
     }
     case "stop_reason": {
@@ -136,7 +246,12 @@ function emitFromMessage(msg: Record<string, unknown>, send: (e: ChatStreamEvent
 }
 
 /** Parse one SSE block (one or more `data:` lines) and dispatch it. Returns true on the [DONE] sentinel. */
-function handleSseBlock(raw: string, send: (e: ChatStreamEvent) => void): boolean {
+async function handleSseBlock(
+  raw: string,
+  send: (e: ChatStreamEvent) => void,
+  signal: AbortSignal | undefined,
+  state: { sawAssistant: boolean },
+): Promise<boolean> {
   const data = raw
     .split("\n")
     .filter((l) => l.startsWith("data:"))
@@ -144,11 +259,13 @@ function handleSseBlock(raw: string, send: (e: ChatStreamEvent) => void): boolea
     .join("\n");
   if (!data) return false;
   if (data === "[DONE]") return true;
+  let parsed: Record<string, unknown>;
   try {
-    emitFromMessage(JSON.parse(data) as Record<string, unknown>, send);
+    parsed = JSON.parse(data) as Record<string, unknown>;
   } catch {
-    /* ignore a malformed/keepalive frame */
+    return false; // malformed/keepalive frame
   }
+  await emitFromMessage(parsed, send, signal, state);
   return false;
 }
 
@@ -228,9 +345,18 @@ export async function streamLetta(
   const agentId = await resolveAgentId();
   let userText = message;
   if (file) {
-    await uploadToVault(file);
-    const note = `[A file named "${file.name}" was just added to your vault. Use your file tools (grep_files / open_files) to read it.]`;
-    userText = message ? `${message}\n\n${note}` : note;
+    // Note framing matters: a bracketed imperative like "[file added… use your tools]" trips
+    // provider prompt-injection filters (bracketed_role_spoofing -> 403). Keep it natural prose,
+    // first-person, no square brackets. And don't let an upload failure kill the whole turn.
+    try {
+      await uploadToVault(file);
+      const note = `I've added the file "${file.name}" to my vault — you can read it with your file tools.`;
+      userText = message ? `${message}\n\n${note}` : note;
+    } catch (e) {
+      const why = String(e).slice(0, 140);
+      const note = `Heads up: I tried to attach "${file.name}" but it couldn't be added (${why}). Letta's folder accepts PDF, text, JSON, and code files.`;
+      userText = message ? `${message}\n\n${note}` : note;
+    }
   }
   const res = await fetch(`${BASE}/v1/agents/${agentId}/messages/stream`, {
     method: "POST",
@@ -240,8 +366,8 @@ export async function streamLetta(
       // Step streaming (NOT token streaming). Letta's stream_tokens=true path shreds the reply
       // into per-token fragments and can split a multi-byte char (emoji) across two of them,
       // yielding a stray garbled glyph. Step streaming delivers each assistant_message as one
-      // server-assembled, correctly-encoded string — structurally immune to that. The BFF route
-      // re-paces it into a typewriter reveal, splitting the COMPLETE string by word (never a char).
+      // server-assembled, correctly-encoded string; we reveal EACH step's message live (word by
+      // word) as it arrives, so intermediate messages appear immediately, not buffered to the end.
       stream_tokens: false,
     }),
     signal,
@@ -254,6 +380,7 @@ export async function streamLetta(
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
+  const state = { sawAssistant: false };
   let buf = "";
   for (;;) {
     const { done, value } = await reader.read();
@@ -264,8 +391,8 @@ export async function streamLetta(
     while ((sep = buf.indexOf("\n\n")) >= 0) {
       const block = buf.slice(0, sep);
       buf = buf.slice(sep + 2);
-      if (handleSseBlock(block, send)) return;
+      if (await handleSseBlock(block, send, signal, state)) return;
     }
   }
-  if (buf.trim()) handleSseBlock(buf, send);
+  if (buf.trim()) await handleSseBlock(buf, send, signal, state);
 }

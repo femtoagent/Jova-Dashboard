@@ -7,18 +7,6 @@ export const runtime = "nodejs";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Pacing of the typewriter reveal for Letta replies (step streaming returns the whole message). */
-const REVEAL_MS = 18;
-
-/**
- * Split a COMPLETE reply into word-sized reveal chunks. Splitting on whitespace boundaries means a
- * multi-byte character is never bisected (the encoding corruption only happens when *bytes* are cut
- * mid-character; words are whole codepoint sequences), so the typewriter effect stays corruption-safe.
- */
-function chunkForReveal(text: string): string[] {
-  return text.match(/\s*\S+|\s+/gu) ?? [];
-}
-
 /**
  * The BFF chat endpoint. Streams NDJSON ChatStreamEvents to the browser.
  *
@@ -51,21 +39,10 @@ export async function POST(req: Request) {
 
       try {
         if (config.backend === "letta") {
-          // Real Jova on step streaming. Pass reasoning/mood through immediately (animation cues),
-          // but buffer her reply text and reveal it word-by-word for a typewriter feel — over the
-          // COMPLETE, correctly-encoded string, so the reveal can't reintroduce the byte-split glyph.
-          let reply = "";
-          await streamLetta(
-            message,
-            (e) => (e.type === "token" ? (reply += e.text) : send(e)),
-            req.signal,
-            image,
-            file,
-          );
-          for (const piece of chunkForReveal(reply)) {
-            send({ type: "token", text: piece });
-            await sleep(REVEAL_MS);
-          }
+          // Real Jova. streamLetta forwards reasoning/mood immediately and reveals each step's
+          // assistant message live (word-by-word) as it arrives, so intermediate messages
+          // (e.g. a mid-turn question) show right away instead of waiting for the whole turn.
+          await streamLetta(message, send, req.signal, image, file);
           send({ type: "done" });
         } else {
           // Mock brain — her reasoning is an animation cue, not shown to the user.

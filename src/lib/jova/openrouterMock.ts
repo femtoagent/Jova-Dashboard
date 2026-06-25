@@ -4,21 +4,20 @@ import type { PresetDetail, PresetSummary } from "./openrouter";
  * Mock OpenRouter presets — served by the BFF routes when OPENROUTER_API_KEY is not set, so the
  * demo's preset picker works offline. Swap to the real API by setting the key (no UI change).
  */
+// Mirror the REAL preset slugs so the offline fallback matches production (the live values come from
+// OpenRouter when OPENROUTER_API_KEY is set).
 export const MOCK_PRESETS: PresetSummary[] = [
-  { slug: "jova-conversation", name: "Jova Conversation", description: "Warm, cheap conversational routing", status: "active" },
-  { slug: "fast-cheap", name: "Fast & Cheap", description: "Lowest latency / cost", status: "active" },
-  { slug: "balanced", name: "Balanced", description: "Balanced quality and cost", status: "active" },
-  { slug: "deep-reasoning", name: "Deep Reasoning", description: "Highest-quality reasoning", status: "active" },
+  { slug: "jova-conversation", name: "Jova Conversation", description: "Warm, cheap conversational routing (text)", status: "active" },
+  { slug: "jova-memory", name: "Jova Memory", description: "Memory / embedding routing", status: "active" },
+  { slug: "image-light", name: "Image Light", description: "Vision turns — lightweight", status: "active" },
+  { slug: "file-medium", name: "File Medium", description: "Document / file turns", status: "active" },
 ];
 
 const MOCK_CONFIG: Record<string, { systemPrompt?: string; config: Record<string, unknown> }> = {
-  "jova-conversation": {
-    systemPrompt: "You are Jova — warm, direct, dry wit.",
-    config: { model: "deepseek/deepseek-v3.2", temperature: 0.7, provider: { sort: "price" } },
-  },
-  "fast-cheap": { config: { model: "openai/gpt-4o-mini", temperature: 0.4, provider: { sort: "throughput" } } },
-  "balanced": { config: { model: "anthropic/claude-haiku-4.5", temperature: 0.6, provider: { sort: "price" } } },
-  "deep-reasoning": { config: { model: "anthropic/claude-opus-4.8", temperature: 0.3, provider: { sort: "quality" } } },
+  "jova-conversation": { config: { model: "deepseek/deepseek-v4-flash", provider: { sort: "latency" } } },
+  "jova-memory": { config: { model: "openai/text-embedding-3-small" } },
+  "image-light": { config: { model: "google/gemini-3.1-flash-lite" } },
+  "file-medium": { config: { model: "(file-capable model)" } },
 };
 
 export function mockPresetDetail(slug: string): PresetDetail | null {
