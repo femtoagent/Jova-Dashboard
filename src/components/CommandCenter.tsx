@@ -13,6 +13,7 @@ import { DreamerPane } from "@/components/network/DreamerPane";
 import { SettingsGear } from "@/components/settings/SettingsGear";
 import { SettingsOverlay } from "@/components/settings/SettingsOverlay";
 import { WorldToggle } from "@/components/WorldToggle";
+import { DocPanel } from "@/components/docs/DocPanel";
 
 // 3D world is client-only.
 const SceneCanvas = dynamic(() => import("@/components/scene/SceneCanvas"), { ssr: false });
@@ -56,6 +57,7 @@ export function CommandCenter() {
         {fullMode && <DreamerPane />}
         {fullMode && <TeamInfoPanel />}
         <ChatSurface />
+        <DocPanel />
         {/* The cog lives on both screens: the network opens full Settings; "just Jova" opens her editor. */}
         {fullMode ? <SettingsGear /> : <SettingsGear to="jova" title="Edit Jova" />}
         <SettingsOverlay />

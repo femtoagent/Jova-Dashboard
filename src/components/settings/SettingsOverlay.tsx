@@ -98,7 +98,7 @@ function TopNav() {
       <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">Settings</div>
       {fullMode && <NavItem active={screen === "teams" || screen === "team"} onClick={showTeams} label="Teams" />}
       <NavItem active={screen === "jova"} onClick={showJova} label="Jova" />
-      <NavItem active={screen === "documents"} onClick={showDocuments} label="Documents" />
+      <NavItem active={screen === "documents"} onClick={showDocuments} label="Routing" />
       {fullMode && <NavItem active={screen === "nexus"} onClick={showNexus} label="Nexus" />}
       {fullMode && <NavItem active={screen === "logs"} onClick={showLogs} label="Logs" />}
       {fullMode && <NavItem active={screen === "history"} onClick={showHistory} label="Chat history" />}

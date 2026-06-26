@@ -47,14 +47,29 @@ export interface ChatSession {
   target?: ChatTarget;
 }
 
+/** A document Jova filed during a turn — surfaced live to the read-only doc preview panel. */
+export interface StreamedDoc {
+  /** vault-relative path, forward slashes */
+  path: string;
+  /** basename, e.g. "Gavin Barker Resume.pdf" */
+  name: string;
+  /** vault subfolder, e.g. "Career" ("" if top-level) */
+  category: string;
+  /** lowercased extension: pdf | docx | xlsx | pptx | … (drives inline vs open-in-tab) */
+  kind: string;
+  /** epoch seconds — also used to bust the preview when the same doc is re-rendered */
+  mtime: number;
+}
+
 /**
  * One event from the streaming chat endpoint. This mirrors the shape we'll build from a real
- * Letta stream: reasoning_message -> reasoning, assistant_message tokens -> token, and an
- * optional mood update from the (future) affect block.
+ * Letta stream: reasoning_message -> reasoning, assistant_message tokens -> token, an optional
+ * mood update from the (future) affect block, and a `doc` event when a render is filed mid-turn.
  */
 export type ChatStreamEvent =
   | { type: "reasoning"; text: string }
   | { type: "token"; text: string }
   | { type: "mood"; mood: Partial<Mood> }
+  | { type: "doc"; doc: StreamedDoc }
   | { type: "done" }
   | { type: "error"; message: string };

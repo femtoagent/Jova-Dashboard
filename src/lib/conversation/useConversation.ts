@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
+import { useDocStore } from "@/lib/docs/useDocStore";
 import { streamChat } from "@/lib/jova/client";
 import { ARRIVAL } from "@/lib/jova/mock";
 import { setSpeaking } from "@/lib/audio/amplitude";
@@ -83,6 +84,10 @@ export function useConversation() {
               break;
             case "mood":
               s.mergeMood(e.mood);
+              break;
+            case "doc":
+              // a doc was filed during the turn -> bring it into the read-only preview panel
+              useDocStore.getState().showDoc(e.doc);
               break;
             case "error":
               s.appendToken(sessionId, assistantId, "…I lost the thread for a second there.");

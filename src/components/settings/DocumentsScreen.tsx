@@ -61,7 +61,7 @@ export function DocumentsScreen() {
   return (
     <div>
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-cyan-100">Documents</h2>
+        <h2 className="text-lg font-semibold text-cyan-100">Routing</h2>
         <p className="text-[12px] text-white/40">
           The OpenRouter preset each agent&rsquo;s brain routes through. Image and file turns still auto-route to the
           vision / file presets.
