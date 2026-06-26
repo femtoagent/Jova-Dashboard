@@ -1,14 +1,30 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useDocStore } from "@/lib/docs/useDocStore";
 
 /** BFF route that serves a vault doc's bytes (PDF inline). */
 const fileUrl = (path: string) => `/api/documents/file?path=${encodeURIComponent(path)}`;
 
+const WIDTH_KEY = "jova.docPanelWidth";
+const MIN_W = 360;
+
+function initialWidth(): number {
+  if (typeof window === "undefined") return 560;
+  const saved = Number(window.localStorage.getItem(WIDTH_KEY));
+  if (saved && saved >= MIN_W) return Math.min(saved, window.innerWidth - 80);
+  return Math.round(Math.min(window.innerWidth * 0.5, 680));
+}
+
+function clampWidth(w: number): number {
+  const max = typeof window !== "undefined" ? window.innerWidth - 80 : 1400;
+  return Math.max(MIN_W, Math.min(w, Math.max(MIN_W, max)));
+}
+
 /**
  * Read-only live preview of the documents Jova produces. Auto-opens when a doc is filed mid-turn
  * (the `doc` stream event -> useDocStore.showDoc). NOT a vault browser and NOT editable — to change
- * a doc you ask Jova and watch the new version replace it here.
+ * a doc you ask Jova and watch the new version replace it here. Resizable via the left-edge handle.
  */
 export function DocPanel() {
   const open = useDocStore((s) => s.open);
@@ -16,6 +32,31 @@ export function DocPanel() {
   const recent = useDocStore((s) => s.recent);
   const setOpen = useDocStore((s) => s.setOpen);
   const select = useDocStore((s) => s.select);
+
+  const [width, setWidth] = useState<number>(initialWidth);
+  const [dragging, setDragging] = useState(false);
+  const draggingRef = useRef(false);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    setDragging(true);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!draggingRef.current) return;
+    // panel is right-anchored, so its width is the distance from the cursor to the right edge
+    setWidth(clampWidth(window.innerWidth - e.clientX));
+  };
+  const endDrag = (e: React.PointerEvent) => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    setDragging(false);
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    try {
+      window.localStorage.setItem(WIDTH_KEY, String(Math.round(width)));
+    } catch {}
+  };
 
   // Nothing has been produced and the panel was never opened -> stay out of the way entirely.
   if (!open && recent.length === 0) return null;
@@ -33,8 +74,23 @@ export function DocPanel() {
   }
 
   return (
-    <aside className="fixed right-0 top-0 z-30 flex h-dvh w-[min(46vw,560px)] flex-col border-l border-white/10 bg-black/65 backdrop-blur-xl">
-      <header className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
+    <aside
+      style={{ width }}
+      className={`fixed right-0 top-0 z-50 flex h-dvh flex-col border-l border-white/10 bg-black/65 backdrop-blur-xl ${dragging ? "select-none" : ""}`}
+    >
+      {/* Left-edge drag handle — resize the panel. Pointer capture keeps the drag alive over the iframe. */}
+      <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        title="Drag to resize"
+        className={`absolute left-0 top-0 z-20 h-full w-1.5 cursor-ew-resize touch-none transition-colors ${
+          dragging ? "bg-cyan-300/40" : "bg-white/5 hover:bg-cyan-300/30"
+        }`}
+      />
+
+      <header className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3 pl-5">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-cyan-100">Documents</div>
           <div className="truncate text-[11px] text-white/40">
@@ -51,7 +107,7 @@ export function DocPanel() {
       </header>
 
       {recent.length > 1 && (
-        <div className="no-scrollbar flex gap-1 overflow-x-auto border-b border-white/10 px-3 py-2">
+        <div className="no-scrollbar flex gap-1 overflow-x-auto border-b border-white/10 px-3 py-2 pl-5">
           {recent.map((d) => (
             <button
               key={d.path}
@@ -69,7 +125,8 @@ export function DocPanel() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1">
+      {/* while dragging, disable the iframe's pointer events so it can't swallow the drag */}
+      <div className={`min-h-0 flex-1 ${dragging ? "pointer-events-none" : ""}`}>
         {!current ? (
           <div className="grid h-full place-items-center px-6 text-center text-sm text-white/40">
             Documents Jova creates will appear here, live.
