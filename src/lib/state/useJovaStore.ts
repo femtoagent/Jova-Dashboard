@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { ChatMessage, ChatSession, ChatTarget } from "@/lib/jova/types";
+import type { ChatMessage, ChatSession, ChatTarget, OutgoingAttachment, Role } from "@/lib/jova/types";
 import { type Mood, type WispType, NEUTRAL_MOOD } from "@/lib/mood";
 
 /** The four states from the brief — the soul of the wisp. */
@@ -55,9 +55,8 @@ interface JovaState {
   voiceOn: boolean; // TTS (her voice out) — wired in Phase 4
   micOn: boolean; // STT (mic in) — wired in Phase 4
   lastInteraction: number;
-  /** staged attachments for the next message — set by the composer picker OR chat drag-and-drop */
-  pendingImage: string | null;
-  pendingFile: { name: string; mime: string; dataUrl: string } | null;
+  /** staged attachments for the next message (up to 5) — from the composer picker OR drag-and-drop */
+  pendingAttachments: OutgoingAttachment[];
 
   // ---- scene actions ----
   setWispType: (t: WispType) => void;
@@ -91,11 +90,21 @@ interface JovaState {
   appendToken: (sessionId: string, msgId: string, text: string) => void;
   setReasoning: (sessionId: string, msgId: string, text: string) => void;
   finalizeMessage: (sessionId: string, msgId: string) => void;
+  /** add an emoji "like" to a message (deduped per emoji+author; user reactions capped at 10) */
+  addReaction: (sessionId: string, msgId: string, emoji: string, by: Role) => void;
+  /** remove an emoji "like" (only its own author should call this) */
+  removeReaction: (sessionId: string, msgId: string, emoji: string, by: Role) => void;
+  /** snapshot of the user reactions already reported to the agent, per session (key "msgId|emoji") */
+  reportedReactions: Record<string, string[]>;
+  /** diff the user's current reactions in a session against what the agent was last told, update the
+   *  snapshot, and return the emojis newly added / removed since — so she understands both. */
+  reconcileReactions: (sessionId: string) => { added: string[]; removed: string[] };
   setChatOpen: (open: boolean) => void;
   toggleVoice: () => void;
   toggleMic: () => void;
-  setPendingImage: (dataUrl: string | null) => void;
-  setPendingFile: (f: { name: string; mime: string; dataUrl: string } | null) => void;
+  /** stage attachments for the next message — appended, then capped at 5 total */
+  addPendingAttachments: (atts: OutgoingAttachment[]) => void;
+  removePendingAttachment: (index: number) => void;
   clearPending: () => void;
 
   /** Register interaction; if she had receded, bring her back. */
@@ -150,12 +159,12 @@ export const useJovaStore = create<JovaState>((set, get) => ({
   activeSessionId: null,
   messages: {},
   unread: {},
+  reportedReactions: {},
   chatOpen: true,
   voiceOn: false,
   micOn: false,
   lastInteraction: Date.now(),
-  pendingImage: null,
-  pendingFile: null,
+  pendingAttachments: [],
 
   setWispType: (t) => set({ wispType: t }),
   setWispState: (s) => set({ wispState: s }),
@@ -335,12 +344,53 @@ export const useJovaStore = create<JovaState>((set, get) => ({
         messages: {
           ...st.messages,
           [sessionId]: (st.messages[sessionId] ?? []).map((m) =>
-            m.id === msgId ? { ...m, streaming: false } : m
+            // stamp the "sent" time when the reply actually finished (what hover shows)
+            m.id === msgId ? { ...m, streaming: false, sentAt: m.sentAt ?? Date.now() } : m
           ),
         },
         unread: viewing || !wasStreaming ? st.unread : bumpUnread(st.unread, sessionId),
       };
     }),
+
+  addReaction: (sessionId, msgId, emoji, by) =>
+    set((st) => ({
+      messages: {
+        ...st.messages,
+        [sessionId]: (st.messages[sessionId] ?? []).map((m) => {
+          if (m.id !== msgId) return m;
+          const reactions = m.reactions ?? [];
+          if (reactions.some((r) => r.emoji === emoji && r.by === by)) return m; // dedupe
+          if (by === "user" && reactions.filter((r) => r.by === "user").length >= 10) return m; // cap
+          return { ...m, reactions: [...reactions, { emoji, by }] };
+        }),
+      },
+    })),
+
+  removeReaction: (sessionId, msgId, emoji, by) =>
+    set((st) => ({
+      messages: {
+        ...st.messages,
+        [sessionId]: (st.messages[sessionId] ?? []).map((m) =>
+          m.id === msgId
+            ? { ...m, reactions: (m.reactions ?? []).filter((r) => !(r.emoji === emoji && r.by === by)) }
+            : m
+        ),
+      },
+    })),
+
+  reconcileReactions: (sessionId) => {
+    const msgs = get().messages[sessionId] ?? [];
+    const current: string[] = [];
+    for (const m of msgs) for (const r of m.reactions ?? []) if (r.by === "user") current.push(`${m.id}|${r.emoji}`);
+    const prev = get().reportedReactions[sessionId] ?? [];
+    const prevSet = new Set(prev);
+    const curSet = new Set(current);
+    const emojiOf = (k: string) => k.slice(k.indexOf("|") + 1);
+    const added = current.filter((k) => !prevSet.has(k)).map(emojiOf);
+    const removed = prev.filter((k) => !curSet.has(k)).map(emojiOf);
+    set((st) => ({ reportedReactions: { ...st.reportedReactions, [sessionId]: current } }));
+    return { added, removed };
+  },
 
   setChatOpen: (open) =>
     set((st) =>
@@ -350,9 +400,11 @@ export const useJovaStore = create<JovaState>((set, get) => ({
     ),
   toggleVoice: () => set((st) => ({ voiceOn: !st.voiceOn })),
   toggleMic: () => set((st) => ({ micOn: !st.micOn })),
-  setPendingImage: (dataUrl) => set({ pendingImage: dataUrl }),
-  setPendingFile: (f) => set({ pendingFile: f }),
-  clearPending: () => set({ pendingImage: null, pendingFile: null }),
+  addPendingAttachments: (atts) =>
+    set((st) => ({ pendingAttachments: [...st.pendingAttachments, ...atts].slice(0, 5) })),
+  removePendingAttachment: (index) =>
+    set((st) => ({ pendingAttachments: st.pendingAttachments.filter((_, i) => i !== index) })),
+  clearPending: () => set({ pendingAttachments: [] }),
 
   touch: () =>
     set((st) => ({

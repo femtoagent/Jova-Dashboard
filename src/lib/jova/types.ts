@@ -2,21 +2,50 @@ import type { Mood } from "@/lib/mood";
 
 export type Role = "user" | "assistant";
 
+/**
+ * An emoji "like" on a message. `by` is who tapped it — the user, or the agent (which expresses its
+ * reactions inside its own reasoning on a normal turn; the BFF parses them out — no sidecar model).
+ */
+export interface Reaction {
+  emoji: string;
+  by: Role;
+}
+
 export interface ChatMessage {
   id: string;
   role: Role;
   content: string;
   createdAt: number;
+  /** when the message was "sent" — user: at submit; assistant: when streaming finished. Falls back
+   *  to createdAt. This is the time shown on hover (the agent's reply time = when it landed). */
+  sentAt?: number;
   /** true while tokens are still streaming in */
   streaming?: boolean;
   /** her internal reasoning — used ONLY as an animation cue, never shown by default */
   reasoning?: string;
   /** a special message rendered distinctly — e.g. a dream carried into the chat as context */
   kind?: "dream";
-  /** an attached image (data URL) for the agent to process */
-  image?: string;
-  /** an attached non-image file (uploaded to her vault); we keep just the name for display */
-  file?: { name: string };
+  /** attachments shown on this message — up to 5 images and/or files */
+  attachments?: MessageAttachment[];
+  /** emoji "likes" on this message — from the user and/or the agent */
+  reactions?: Reaction[];
+}
+
+/** An attachment as displayed on a message bubble. */
+export interface MessageAttachment {
+  kind: "image" | "file";
+  name: string;
+  /** images only: a data URL for inline display */
+  url?: string;
+}
+
+/** An attachment being sent with a turn (image seen inline; file uploaded to her vault). */
+export interface OutgoingAttachment {
+  kind: "image" | "file";
+  name: string;
+  mime: string;
+  /** data URL (data:<mime>;base64,…) */
+  dataUrl: string;
 }
 
 /** Who a chat session is addressed to — a team's agent. Absent on a session = Jova herself. */
@@ -71,5 +100,21 @@ export type ChatStreamEvent =
   | { type: "token"; text: string }
   | { type: "mood"; mood: Partial<Mood> }
   | { type: "doc"; doc: StreamedDoc }
+  /** the agent tapping emoji "likes" back onto the user's latest message (cheap reactor model) */
+  | { type: "reaction"; emojis: string[] }
+  /** end the current reply bubble and start a new one — a separate step in the same turn (e.g. she
+   *  pauses to run a tool: "Hold on, let me check…" then "Okay, found it") shows as its own bubble */
+  | { type: "message_break" }
   | { type: "done" }
   | { type: "error"; message: string };
+
+/** Config the client passes to /api/chat to drive emoji reactions for this turn. */
+export interface ReactionTurnConfig {
+  /** master gate — the active agent's preset is on the reactions allow-list */
+  enabled: boolean;
+  /** natural-language context woven into the agent's turn: the reaction convention + any likes the
+   *  user just added/removed since the agent was last told (so she understands them) */
+  note?: string;
+  /** emojis the user just ADDED this turn — lets the mock brain mirror them offline */
+  incoming?: string[];
+}

@@ -42,6 +42,20 @@ body {
   }
 }
 
+/* Discord-style "is typing" dots — a gentle staggered bob + brighten (delays set per-dot inline) */
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
 @keyframes radial-pop {
   from {
     transform: translate(-50%, -50%) scale(0);

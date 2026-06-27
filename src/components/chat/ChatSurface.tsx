@@ -4,7 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useSettingsStore } from "@/lib/settings/useSettingsStore";
 import { MessageList } from "./MessageList";
-import { Composer, fileToDataUrl } from "./Composer";
+import { Composer, fileToDataUrl, MAX_ATTACH_BYTES } from "./Composer";
 import { ConversationRail } from "./ConversationRail";
 
 const DEFAULT_H = 440;
@@ -32,8 +32,7 @@ export function ChatSurface() {
   // a real team agent (not Jova, not the Nexus orchestrator) can deep-link to its settings screen
   const editableAgent = target && target.teamId !== "nexus";
 
-  const setPendingImage = useJovaStore((s) => s.setPendingImage);
-  const setPendingFile = useJovaStore((s) => s.setPendingFile);
+  const addPendingAttachments = useJovaStore((s) => s.addPendingAttachments);
 
   const [height, setHeight] = useState(DEFAULT_H);
   const [railOpen, setRailOpen] = useState(true);
@@ -45,11 +44,17 @@ export function ChatSurface() {
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    for (const f of Array.from(e.dataTransfer.files)) {
-      const dataUrl = await fileToDataUrl(f);
-      if (f.type.startsWith("image/")) setPendingImage(dataUrl);
-      else setPendingFile({ name: f.name, mime: f.type || "application/octet-stream", dataUrl });
-    }
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.size <= MAX_ATTACH_BYTES);
+    if (!files.length) return;
+    const atts = await Promise.all(
+      files.map(async (f) => ({
+        kind: f.type.startsWith("image/") ? ("image" as const) : ("file" as const),
+        name: f.name,
+        mime: f.type || "application/octet-stream",
+        dataUrl: await fileToDataUrl(f),
+      })),
+    );
+    addPendingAttachments(atts);
   };
 
   const onHandleDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -105,6 +110,7 @@ export function ChatSurface() {
 
   return (
     <div
+      data-chat-pane
       style={{ height }}
       className="fixed bottom-5 left-1/2 flex w-[min(760px,96vw)] max-h-[90vh] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-[0_0_60px_rgba(0,180,255,0.08)] backdrop-blur-xl animate-[fadein_400ms_ease]"
     >
@@ -187,7 +193,7 @@ export function ChatSurface() {
           >
             {dragOver && (
               <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border-2 border-dashed border-cyan-300/60 bg-cyan-400/10 backdrop-blur-sm">
-                <span className="rounded-lg bg-black/50 px-3 py-1.5 text-sm text-cyan-100">Drop an image or file for Jova</span>
+                <span className="rounded-lg bg-black/50 px-3 py-1.5 text-sm text-cyan-100">Drop images or files for {target ? target.label : "Jova"}</span>
               </div>
             )}
             <MessageList />

@@ -1,4 +1,4 @@
-import type { ChatStreamEvent } from "@/lib/jova/types";
+import type { ChatStreamEvent, OutgoingAttachment, ReactionTurnConfig } from "@/lib/jova/types";
 
 /**
  * Frontend -> BFF client. The browser only ever talks to our own /api/* routes; those routes
@@ -22,10 +22,10 @@ export async function health(): Promise<HealthResult> {
 export async function streamChat(params: {
   sessionId: string;
   message: string;
-  /** optional image attachment as a data URL (data:<mime>;base64,…) — seen inline by the vision model */
-  image?: string;
-  /** optional non-image file — uploaded to the agent's vault folder to read */
-  file?: { name: string; mime: string; dataUrl: string };
+  /** up to 5 attachments — images are seen inline by the vision model, files uploaded to her vault */
+  attachments?: OutgoingAttachment[];
+  /** emoji-reaction config for this turn (gate + reactor preset + incoming likes) */
+  reactions?: ReactionTurnConfig;
   signal?: AbortSignal;
   onEvent: (e: ChatStreamEvent) => void;
 }): Promise<void> {
@@ -35,8 +35,8 @@ export async function streamChat(params: {
     body: JSON.stringify({
       sessionId: params.sessionId,
       message: params.message,
-      image: params.image,
-      file: params.file,
+      attachments: params.attachments,
+      reactions: params.reactions,
     }),
     signal: params.signal,
   });

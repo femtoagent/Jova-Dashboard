@@ -1,4 +1,4 @@
-import type { ChatStreamEvent } from "@/lib/jova/types";
+import type { ChatStreamEvent, OutgoingAttachment } from "@/lib/jova/types";
 
 /**
  * Server-only Letta client (the live half of the BFF seam — see CONNECTING.md §3).
@@ -199,6 +199,62 @@ async function revealText(text: string, send: (e: ChatStreamEvent) => void, sign
   }
 }
 
+/** Per-stream mutable state threaded through the SSE handlers. */
+interface StreamState {
+  sawAssistant: boolean;
+  /** when true, parse her reasoning for a trailing "React: 🔥" line and emit it as a reaction */
+  emitReactions: boolean;
+  /** full reasoning text accumulated across the turn — we parse the LAST React: marker from it */
+  reasoningText: string;
+}
+
+/** Pull standalone emoji (incl. ZWJ sequences + variation selectors) out of arbitrary text. */
+function extractEmojis(text: string): string[] {
+  return (text ?? "").match(/\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic})*/gu) ?? [];
+}
+
+// A "react"-style marker (react / reaction / reacting / react with / reaction:) immediately followed
+// by a run of emoji. Requiring the emoji to FOLLOW the marker avoids mistaking an incidental emoji in
+// her thinking ("won't react to that 😊") for a reaction.
+const REACT_RE =
+  /react[a-z]*\s*(?:with|:|=|->|→)?\s*((?:\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*[\s,]*)+)/giu;
+
+/**
+ * Her reaction rides her own reasoning (no sidecar): she's asked to drop a line like "React: 🔥❤️" as
+ * the LAST line of her private reasoning. We take the emoji after the LAST such marker only — so an
+ * earlier mention of "React:" mid-reasoning (her thinking about whether to react) doesn't fire — then
+ * dedupe and cap at 10 (she's told to pile on only when truly excited).
+ */
+function lastReactionEmojis(reasoning: string): string[] {
+  const matches = [...(reasoning ?? "").matchAll(REACT_RE)];
+  if (!matches.length) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const e of extractEmojis(matches[matches.length - 1][1])) {
+    if (!seen.has(e)) {
+      seen.add(e);
+      out.push(e);
+    }
+  }
+  return out.slice(0, 10);
+}
+
+/**
+ * Strip a leaked standalone "React: 🔥" LINE out of her VISIBLE reply — the marker belongs in her
+ * private reasoning, but the model sometimes echoes it into the message. Inter-emoji separators are
+ * limited to spaces/tabs/commas so it can't swallow across lines. Never strips the reply to empty.
+ */
+function stripReactionLines(text: string): string {
+  const stripped = (text ?? "")
+    .replace(
+      /^[ \t]*react[a-z]*[ \t]*(?:with|:|=|->|→)?[ \t]*(?:\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*[ \t,]*)+[ \t]*$/gimu,
+      "",
+    )
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return stripped || text;
+}
+
 /**
  * Translate one parsed SSE payload into ChatStreamEvents, revealing each step's assistant message
  * LIVE (word-by-word) as it arrives — so an intermediate message (e.g. a mid-turn question) shows
@@ -208,7 +264,7 @@ async function emitFromMessage(
   msg: Record<string, unknown>,
   send: (e: ChatStreamEvent) => void,
   signal: AbortSignal | undefined,
-  state: { sawAssistant: boolean },
+  state: StreamState,
 ): Promise<void> {
   const mt = (msg.message_type ?? (msg as { messageType?: string }).messageType ?? msg.type) as
     | string
@@ -216,22 +272,41 @@ async function emitFromMessage(
   switch (mt) {
     case "reasoning_message": {
       const text = (msg.reasoning as string) ?? "";
-      if (text) send({ type: "reasoning", text });
+      if (text) {
+        if (state.emitReactions) state.reasoningText += text + "\n";
+        send({ type: "reasoning", text });
+      }
       break;
     }
     case "hidden_reasoning_message": {
       // provider-redacted thinking — usually empty, but surface the cue if any text survives
       const text = (msg.hidden_reasoning as string) ?? "";
-      if (text) send({ type: "reasoning", text });
+      if (text) {
+        if (state.emitReactions) state.reasoningText += text + "\n";
+        send({ type: "reasoning", text });
+      }
       break;
     }
     case "assistant_message": {
-      const text = extractText(msg.content);
+      // she's told to keep the React: line in reasoning, but strip it if it leaks into the visible reply
+      const text = state.emitReactions ? stripReactionLines(extractText(msg.content)) : extractText(msg.content);
       if (text) {
-        // blank line between consecutive step messages in one turn so they don't run together
-        if (state.sawAssistant) send({ type: "token", text: "\n\n" });
+        // a new spoken step in the same turn (e.g. after a tool call) becomes its OWN bubble
+        if (state.sawAssistant) send({ type: "message_break" });
         state.sawAssistant = true;
         await revealText(text, send, signal);
+      }
+      break;
+    }
+    case "tool_call_message": {
+      // She's finished speaking for this step and is about to run a tool. Close the current bubble and
+      // open a fresh one — which renders as the three-dot typing indicator while the tool runs, then
+      // fills with her next message. (Only if she actually said something in this bubble; a tool-only
+      // step before any speech keeps the existing empty "typing" bubble.) This replaces the trailing
+      // caret on a finished message with a proper "…working" bubble below it.
+      if (state.sawAssistant) {
+        send({ type: "message_break" });
+        state.sawAssistant = false;
       }
       break;
     }
@@ -241,7 +316,7 @@ async function emitFromMessage(
       if (reason && FATAL_STOPS.has(reason)) send({ type: "error", message: `Letta: ${reason}` });
       break;
     }
-    // tool_call_message / tool_return_message / usage_statistics / ping / system / user -> ignored
+    // tool_return_message / usage_statistics / ping / system / user -> ignored
   }
 }
 
@@ -250,7 +325,7 @@ async function handleSseBlock(
   raw: string,
   send: (e: ChatStreamEvent) => void,
   signal: AbortSignal | undefined,
-  state: { sawAssistant: boolean },
+  state: StreamState,
 ): Promise<boolean> {
   const data = raw
     .split("\n")
@@ -275,16 +350,18 @@ async function handleSseBlock(
  * REJECTS OpenAI's `{ type: "image_url" }` for MessageCreate (422 union_tag_invalid). A base64 data
  * URL becomes a base64 source; any other string is treated as a remote URL source.
  */
-function buildContent(message: string, image?: string): string | unknown[] {
-  if (!image) return message;
+function buildContent(message: string, images: string[]): string | unknown[] {
+  if (!images.length) return message;
   const parts: unknown[] = [];
   if (message) parts.push({ type: "text", text: message });
-  const m = /^data:([^;]+);base64,(.*)$/s.exec(image);
-  parts.push(
-    m
-      ? { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } }
-      : { type: "image", source: { type: "url", url: image } },
-  );
+  for (const image of images) {
+    const m = /^data:([^;]+);base64,(.*)$/s.exec(image);
+    parts.push(
+      m
+        ? { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } }
+        : { type: "image", source: { type: "url", url: image } },
+    );
+  }
   return parts;
 }
 
@@ -332,37 +409,52 @@ export async function uploadToVault(file: VaultFile): Promise<void> {
 
 /**
  * Stream one user turn from Letta, emitting ChatStreamEvents via `send`. Does NOT emit the final
- * `{ type: "done" }` — the route owns that so it fires on success and on error alike. An attached
- * `file` is uploaded to her vault first, and the message tells her it's there to read.
+ * `{ type: "done" }` — the route owns that so it fires on success and on error alike. Up to 5
+ * attachments: image attachments go inline to the vision model; file attachments are uploaded to her
+ * vault first, and the message tells her they're there to read.
  */
 export async function streamLetta(
   message: string,
   send: (e: ChatStreamEvent) => void,
   signal?: AbortSignal,
-  image?: string,
-  file?: VaultFile,
+  attachments: OutgoingAttachment[] = [],
+  emitReactions = false,
 ): Promise<void> {
   const agentId = await resolveAgentId();
+  const images = attachments.filter((a) => a.kind === "image").map((a) => a.dataUrl);
+  const files = attachments.filter((a) => a.kind === "file");
   let userText = message;
-  if (file) {
-    // Note framing matters: a bracketed imperative like "[file added… use your tools]" trips
-    // provider prompt-injection filters (bracketed_role_spoofing -> 403). Keep it natural prose,
-    // first-person, no square brackets. And don't let an upload failure kill the whole turn.
-    try {
-      await uploadToVault(file);
-      const note = `I've added the file "${file.name}" to my vault — you can read it with your file tools.`;
-      userText = message ? `${message}\n\n${note}` : note;
-    } catch (e) {
-      const why = String(e).slice(0, 140);
-      const note = `Heads up: I tried to attach "${file.name}" but it couldn't be added (${why}). Letta's folder accepts PDF, text, JSON, and code files.`;
-      userText = message ? `${message}\n\n${note}` : note;
+  if (files.length) {
+    // Note framing matters: a bracketed imperative like "[file added… use your tools]" trips provider
+    // prompt-injection filters (bracketed_role_spoofing -> 403). Keep it natural prose, no square
+    // brackets. And don't let an upload failure kill the whole turn.
+    const added: string[] = [];
+    const failed: string[] = [];
+    for (const file of files) {
+      try {
+        await uploadToVault(file);
+        added.push(file.name);
+      } catch (e) {
+        failed.push(`"${file.name}" (${String(e).slice(0, 100)})`);
+      }
     }
+    const parts: string[] = [];
+    if (added.length)
+      parts.push(
+        added.length === 1
+          ? `I've added the file "${added[0]}" to my vault — you can read it with your file tools.`
+          : `I've added these files to my vault — you can read them with your file tools: ${added.map((n) => `"${n}"`).join(", ")}.`,
+      );
+    if (failed.length)
+      parts.push(`Heads up: ${failed.join("; ")} couldn't be added. Letta's folder accepts PDF, text, JSON, and code files.`);
+    const note = parts.join(" ");
+    userText = message ? `${message}\n\n${note}` : note;
   }
   const res = await fetch(`${BASE}/v1/agents/${agentId}/messages/stream`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
     body: JSON.stringify({
-      messages: [{ role: "user", content: buildContent(userText, image) }],
+      messages: [{ role: "user", content: buildContent(userText, images) }],
       // Step streaming (NOT token streaming). Letta's stream_tokens=true path shreds the reply
       // into per-token fragments and can split a multi-byte char (emoji) across two of them,
       // yielding a stray garbled glyph. Step streaming delivers each assistant_message as one
@@ -380,9 +472,10 @@ export async function streamLetta(
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  const state = { sawAssistant: false };
+  const state: StreamState = { sawAssistant: false, emitReactions, reasoningText: "" };
   let buf = "";
-  for (;;) {
+  let ended = false;
+  outer: for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     buf += decoder.decode(value, { stream: true });
@@ -391,8 +484,17 @@ export async function streamLetta(
     while ((sep = buf.indexOf("\n\n")) >= 0) {
       const block = buf.slice(0, sep);
       buf = buf.slice(sep + 2);
-      if (await handleSseBlock(block, send, signal, state)) return;
+      if (await handleSseBlock(block, send, signal, state)) {
+        ended = true;
+        break outer;
+      }
     }
   }
-  if (buf.trim()) await handleSseBlock(buf, send, signal, state);
+  if (!ended && buf.trim()) await handleSseBlock(buf, send, signal, state);
+
+  // Her reaction — parse the LAST "React: 🔥" marker from her full reasoning (deduped, capped at 10).
+  if (state.emitReactions) {
+    const emojis = lastReactionEmojis(state.reasoningText);
+    if (emojis.length) send({ type: "reaction", emojis });
+  }
 }

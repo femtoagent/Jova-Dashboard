@@ -1,5 +1,5 @@
-import type { ChatStreamEvent, StreamedDoc } from "@/lib/jova/types";
-import { generateMockReply, tokenize } from "@/lib/jova/mock";
+import type { ChatStreamEvent, OutgoingAttachment, ReactionTurnConfig, StreamedDoc } from "@/lib/jova/types";
+import { generateMockReply, mockReaction, tokenize } from "@/lib/jova/mock";
 import { config } from "@/lib/config";
 import { streamLetta } from "@/lib/jova/letta";
 import { listDocs } from "@/lib/jova/workshop";
@@ -27,19 +27,34 @@ function toStreamedDoc(path: string, mtime: number): StreamedDoc {
  */
 export async function POST(req: Request) {
   let message = "";
-  let image: string | undefined;
-  let file: { name: string; mime: string; dataUrl: string } | undefined;
+  let attachments: OutgoingAttachment[] = [];
+  let reactions: ReactionTurnConfig | undefined;
   try {
     const body = await req.json();
     message = typeof body?.message === "string" ? body.message : "";
-    if (typeof body?.image === "string" && body.image) image = body.image;
-    const f = body?.file;
-    if (f && typeof f.name === "string" && typeof f.dataUrl === "string") {
-      file = { name: f.name, mime: typeof f.mime === "string" ? f.mime : "", dataUrl: f.dataUrl };
+    if (Array.isArray(body?.attachments)) {
+      attachments = body.attachments
+        .filter((a: unknown): a is OutgoingAttachment => {
+          const x = a as Record<string, unknown>;
+          return !!x && typeof x.name === "string" && typeof x.dataUrl === "string" && (x.kind === "image" || x.kind === "file");
+        })
+        .slice(0, 5)
+        .map((a: OutgoingAttachment) => ({ kind: a.kind, name: a.name, mime: typeof a.mime === "string" ? a.mime : "", dataUrl: a.dataUrl }));
+    }
+    const r = body?.reactions;
+    if (r && r.enabled) {
+      reactions = {
+        enabled: true,
+        note: typeof r.note === "string" ? r.note : "",
+        incoming: Array.isArray(r.incoming) ? r.incoming.filter((x: unknown) => typeof x === "string").slice(0, 10) : [],
+      };
     }
   } catch {
     /* empty body -> empty message */
   }
+
+  // The raw user message (without the reaction note we may weave in for the agent's context).
+  const userMessage = message;
 
   const encoder = new TextEncoder();
 
@@ -50,6 +65,14 @@ export async function POST(req: Request) {
 
       try {
         if (config.backend === "letta") {
+          // Weave the reaction note (the convention + any likes I've added/removed) into the message
+          // she reads, so she UNDERSTANDS them and can react back inside her own reasoning. Natural
+          // prose, no square brackets (those trip provider prompt-injection filters → 403).
+          let lettaMessage = message;
+          if (reactions?.note) {
+            lettaMessage = message ? `${message}\n\n${reactions.note}` : reactions.note;
+          }
+
           // Snapshot the vault before the turn so we can detect anything jova-docs files during it.
           // The workshop reports its own mtimes, so the diff is robust to client/server clock skew.
           let before: Map<string, number> | null = null;
@@ -60,8 +83,9 @@ export async function POST(req: Request) {
           }
 
           // Real Jova. streamLetta forwards reasoning/mood immediately and reveals each step's
-          // assistant message live (word-by-word) as it arrives.
-          await streamLetta(message, send, req.signal, image, file);
+          // assistant message live (word-by-word) as it arrives. When reactions are enabled it also
+          // parses any "React: 🔥" line out of her reasoning and emits it as a `reaction` event.
+          await streamLetta(lettaMessage, send, req.signal, attachments, !!reactions?.enabled);
 
           // Push-on-complete: emit a `doc` event for every doc that's new or newer than the snapshot.
           if (before) {
@@ -77,6 +101,7 @@ export async function POST(req: Request) {
               /* best-effort — a failed diff just means no live preview this turn */
             }
           }
+
           send({ type: "done" });
         } else {
           // Mock brain — her reasoning is an animation cue, not shown to the user.
@@ -93,6 +118,14 @@ export async function POST(req: Request) {
           // demo: if the message looks doc-related, surface a placeholder so the live panel is visible offline
           if (/\b(resume|cv|document|doc|pdf|report|slide|deck|spreadsheet|render)\b/i.test(message)) {
             send({ type: "doc", doc: toStreamedDoc("Career/Sample Resume.pdf", Date.now() / 1000) });
+          }
+          // demo the reaction loop offline: a simulated cheap reactor taps emoji back onto the message
+          if (reactions?.enabled) {
+            const emojis = mockReaction(userMessage, reactions.incoming);
+            if (emojis.length) {
+              await sleep(320);
+              send({ type: "reaction", emojis });
+            }
           }
           send({ type: "done" });
         }

@@ -1,8 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useConversation } from "@/lib/conversation/useConversation";
+
+/** Per-file attachment cap — base64 inflates ~33%, so this keeps a 5-file turn to a sane POST size. */
+export const MAX_ATTACH_BYTES = 8 * 1024 * 1024;
 
 /** Read a File into a base64 data URL — serves both the inline preview and the server upload
  *  (a blob: object URL is browser-only and useless past the BFF). Shared with the chat drag-and-drop. */
@@ -15,74 +18,109 @@ export function fileToDataUrl(f: File): Promise<string> {
   });
 }
 
+const MAX_TA_HEIGHT = 88; // ~3 lines, then the textarea scrolls internally
+
 export function Composer() {
   const [text, setText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const { send } = useConversation();
   const micOn = useJovaStore((s) => s.micOn);
   const target = useJovaStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.target ?? null);
-  // attachments are shared in the store so the chat drag-and-drop can stage them too
-  const pendingImage = useJovaStore((s) => s.pendingImage);
-  const pendingFile = useJovaStore((s) => s.pendingFile);
-  const setPendingImage = useJovaStore((s) => s.setPendingImage);
-  const setPendingFile = useJovaStore((s) => s.setPendingFile);
+  // up to 5 attachments are shared in the store so the chat drag-and-drop can stage them too
+  const pendingAttachments = useJovaStore((s) => s.pendingAttachments);
+  const addPendingAttachments = useJovaStore((s) => s.addPendingAttachments);
+  const removePendingAttachment = useJovaStore((s) => s.removePendingAttachment);
   const clearPending = useJovaStore((s) => s.clearPending);
+  const [notice, setNotice] = useState("");
+  const full = pendingAttachments.length >= 5;
+
+  // grow the textarea with its content up to ~3 lines, then scroll (layout effect = no resize flash;
+  // +2 accounts for the 1px top/bottom border under border-box so 2-3 lines don't show a scrollbar)
+  useLayoutEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight + 2, MAX_TA_HEIGHT) + "px";
+  }, [text]);
+
+  const flash = (msg: string) => {
+    setNotice(msg);
+    window.setTimeout(() => setNotice((n) => (n === msg ? "" : n)), 3500);
+  };
 
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!f) return;
-    const dataUrl = await fileToDataUrl(f);
-    if (f.type.startsWith("image/")) setPendingImage(dataUrl);
-    else setPendingFile({ name: f.name, mime: f.type || "application/octet-stream", dataUrl });
+    if (!files.length) return;
+    await stageFiles(files);
+  };
+
+  /** Shared by the picker: drop oversized files, cap to 5 total, and tell the user what was skipped. */
+  const stageFiles = async (files: File[]) => {
+    const tooBig = files.filter((f) => f.size > MAX_ATTACH_BYTES).map((f) => f.name);
+    const ok = files.filter((f) => f.size <= MAX_ATTACH_BYTES);
+    const room = 5 - pendingAttachments.length;
+    const take = ok.slice(0, Math.max(0, room));
+    const overflow = ok.length - take.length;
+    const atts = await Promise.all(
+      take.map(async (f) => ({
+        kind: f.type.startsWith("image/") ? ("image" as const) : ("file" as const),
+        name: f.name,
+        mime: f.type || "application/octet-stream",
+        dataUrl: await fileToDataUrl(f),
+      })),
+    );
+    if (atts.length) addPendingAttachments(atts);
+    const msgs: string[] = [];
+    if (tooBig.length) msgs.push(`${tooBig.length} too large (max 8MB)`);
+    if (overflow > 0) msgs.push(`${overflow} over the 5-attachment limit`);
+    if (msgs.length) flash(`Skipped: ${msgs.join("; ")}.`);
   };
 
   const submit = () => {
     const t = text.trim();
-    if (!t && !pendingImage && !pendingFile) return;
-    const image = pendingImage ?? undefined;
-    const file = pendingFile ?? undefined;
+    if (!t && pendingAttachments.length === 0) return;
+    const attachments = pendingAttachments.length ? pendingAttachments : undefined;
     setText("");
     clearPending();
-    void send(t, { image, file });
+    void send(t, { attachments });
   };
 
   return (
     <div className="px-3 pb-3 pt-2">
-      {(pendingImage || pendingFile) && (
+      {notice && <div className="mb-2 text-[11px] text-amber-200/70">{notice}</div>}
+      {pendingAttachments.length > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          {pendingImage && (
-            <div className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-1 pr-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={pendingImage} alt="attachment" className="h-10 w-10 rounded object-cover" />
-              <span className="text-[11px] text-white/50">image</span>
-              <button onClick={() => setPendingImage(null)} title="Remove" className="text-white/40 transition hover:text-rose-300">
+          {pendingAttachments.map((a, i) => (
+            <div key={i} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-1 pr-2">
+              {a.kind === "image" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={a.dataUrl} alt={a.name} className="h-10 w-10 rounded object-cover" />
+              ) : (
+                <span className="px-1 text-base">📄</span>
+              )}
+              <span className="max-w-[140px] truncate text-[11px] text-white/60">{a.kind === "image" ? "image" : a.name}</span>
+              <button onClick={() => removePendingAttachment(i)} title="Remove" className="text-white/40 transition hover:text-rose-300">
                 ×
               </button>
             </div>
-          )}
-          {pendingFile && (
-            <div className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5">
-              <span className="text-base">📄</span>
-              <span className="max-w-[180px] truncate text-[11px] text-white/60">{pendingFile.name}</span>
-              <span className="text-[10px] text-white/30">→ vault</span>
-              <button onClick={() => setPendingFile(null)} title="Remove" className="text-white/40 transition hover:text-rose-300">
-                ×
-              </button>
-            </div>
-          )}
+          ))}
+          <span className="text-[10px] text-white/30">{pendingAttachments.length}/5</span>
         </div>
       )}
       <div className="flex items-end gap-2">
         <button
           onClick={() => fileRef.current?.click()}
-          title="Attach an image or a file (or drag it onto the chat)"
-          className="h-[44px] shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 text-lg text-white/60 transition hover:bg-white/10"
+          disabled={full}
+          title={full ? "Up to 5 attachments" : "Attach images or files (up to 5, or drag them onto the chat)"}
+          className="h-[44px] shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 text-lg text-white/60 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
         >
           📎
         </button>
-        <input ref={fileRef} type="file" className="hidden" onChange={onPick} />
+        <input ref={fileRef} type="file" multiple className="hidden" onChange={onPick} />
         <textarea
+          ref={taRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -93,7 +131,7 @@ export function Composer() {
           }}
           rows={1}
           placeholder={micOn ? "Listening… (mic stub) — or just type" : target ? `Message ${target.teamName}'s ${target.label}…` : "Talk to Jova…"}
-          className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-[15px] text-white outline-none placeholder:text-white/35 focus:border-cyan-300/40 focus:bg-white/[0.07]"
+          className="min-h-[44px] flex-1 resize-none overflow-y-auto rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-[15px] text-white outline-none placeholder:text-white/35 focus:border-cyan-300/40 focus:bg-white/[0.07]"
         />
         <button
           onClick={submit}

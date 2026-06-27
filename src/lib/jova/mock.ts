@@ -114,6 +114,27 @@ export function generateMockReply(rawMessage: string): MockReply {
   return { reasoning: "General acknowledgement.", text: pick(DEFAULTS), mood: { valence: 0.3, arousal: 0.4 } };
 }
 
+/**
+ * Mock stand-in for the cheap "reactor" model: read the user's message (and any reactions they just
+ * gave) and tap back 0–2 emoji, the way a person reacts in chat. Pure keyword matching — no model
+ * call — so the demo shows the whole reaction loop alive offline. The real path (reactor.ts) does
+ * the same job with a cheap OpenRouter preset.
+ */
+export function mockReaction(userText: string, incoming?: string[]): string[] {
+  const t = (userText ?? "").toLowerCase();
+  // if the user just liked something of hers, she warmly mirrors back
+  if (incoming && incoming.length) return pick([["🥰"], ["❤️"], ["🙏"], ["😊", "❤️"]]);
+  if (has(t, "thank", "love", "appreciate", "amazing", "awesome", "great job", "you're the best")) return pick([["🥰"], ["❤️"], ["🙏"]]);
+  if (has(t, "excited", "let's go", "yes!", "ship it", "finally", "🔥")) return pick([["🔥"], ["🚀"], ["🔥", "✨"]]);
+  if (has(t, "lol", "haha", "funny", "lmao", "😂")) return ["😂"];
+  if (has(t, "sad", "tired", "stressed", "rough", "hard day", "sorry", "worried")) return pick([["🥺"], ["🫶"], ["🙏"]]);
+  if (has(t, "wow", "incredible", "unbelievable", "no way", "whoa")) return pick([["🤯"], ["😮"]]);
+  if (has(t, "done", "finished", "fixed", "works", "shipped", "deployed")) return pick([["✅"], ["🎉"], ["💯"]]);
+  if (t.includes("?")) return pick([["🤔"], [], []]); // sometimes she just listens
+  if (t.trim().length === 0) return [];
+  return pick([["👍"], ["✨"], [], []]); // often no reaction — restraint reads as human
+}
+
 /** Split text into word-ish tokens (keeping trailing spaces) so streaming feels natural. */
 export function tokenize(text: string): string[] {
   return text.match(/\S+\s*/g) ?? [text];
