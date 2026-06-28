@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useSettingsStore } from "@/lib/settings/useSettingsStore";
+import { useVoice } from "@/lib/conversation/useVoice";
 import { MessageList } from "./MessageList";
 import { Composer, fileToDataUrl, MAX_ATTACH_BYTES } from "./Composer";
 import { ConversationRail } from "./ConversationRail";
@@ -20,8 +21,8 @@ export function ChatSurface() {
   const setChatOpen = useJovaStore((s) => s.setChatOpen);
   const voiceOn = useJovaStore((s) => s.voiceOn);
   const micOn = useJovaStore((s) => s.micOn);
-  const toggleVoice = useJovaStore((s) => s.toggleVoice);
-  const toggleMic = useJovaStore((s) => s.toggleMic);
+  const listening = useJovaStore((s) => s.listening);
+  const { toggleSpeaker, toggleHandsFree } = useVoice();
   const activeId = useJovaStore((s) => s.activeSessionId);
   const closeSession = useJovaStore((s) => s.closeSession);
   const totalUnread = useJovaStore((s) => Object.values(s.unread).reduce((a, b) => a + b, 0));
@@ -153,10 +154,16 @@ export function ChatSurface() {
             <div className="flex shrink-0 items-center gap-1.5">
               {isJova && (
                 <>
-                  <IconToggle on={micOn} onClick={toggleMic} label="Mic (STT)" hint="Jova only · wired in Phase 4">
+                  <IconToggle
+                    on={micOn}
+                    onClick={toggleHandsFree}
+                    label="Hands-free mic"
+                    hint="Listen continuously and auto-send each utterance"
+                    pulse={micOn && listening}
+                  >
                     🎤
                   </IconToggle>
-                  <IconToggle on={voiceOn} onClick={toggleVoice} label="Voice (TTS)" hint="Jova only · wired in Phase 4">
+                  <IconToggle on={voiceOn} onClick={toggleSpeaker} label="Voice" hint="Jova speaks her replies aloud">
                     🔊
                   </IconToggle>
                 </>
@@ -210,19 +217,21 @@ function IconToggle({
   onClick,
   label,
   hint,
+  pulse = false,
   children,
 }: {
   on: boolean;
   onClick: () => void;
   label: string;
   hint: string;
+  pulse?: boolean;
   children: ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       title={`${label} — ${hint}`}
-      className={`rounded-lg px-2 py-1 text-sm transition ${
+      className={`rounded-lg px-2 py-1 text-sm transition ${pulse ? "animate-pulse" : ""} ${
         on ? "border border-cyan-300/30 bg-cyan-400/25 text-cyan-50" : "border border-transparent text-white/45 hover:bg-white/10"
       }`}
     >

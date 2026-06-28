@@ -8,6 +8,9 @@ import { streamChat } from "@/lib/jova/client";
 import { ARRIVAL } from "@/lib/jova/mock";
 import type { OutgoingAttachment, ReactionTurnConfig } from "@/lib/jova/types";
 import { setSpeaking } from "@/lib/audio/amplitude";
+import { speak } from "@/lib/audio/tts";
+import { useAgentVoices } from "@/lib/settings/useAgentVoices";
+import { useVoiceStatus } from "@/lib/settings/useVoiceStatus";
 import { useHistoryStore } from "@/lib/logs/useHistoryStore";
 import { useLogStore } from "@/lib/logs/useLogStore";
 
@@ -86,9 +89,27 @@ export function useConversation() {
       s.finalizeMessage(sessionId, msgId);
       if (!arrival && m?.content?.trim()) {
         useHistoryStore.getState().record({ ts: Date.now(), sessionId, who, teamId, agentId, role: "assistant", content: m.content, reasoning: m.reasoning });
+        // Speak her reply aloud when voice is on AND this agent is voice-enabled in the roster (only
+        // Jova by default). Each bubble carries the agent's assigned ElevenLabs voice + model; the TTS
+        // client queues a multi-step reply in order. Skip entirely when out of credits.
+        if (s.voiceOn && m.content.trim()) {
+          const av = useAgentVoices.getState().forKey(sess?.target ? sess.target.agentId : "jova");
+          const vs = useVoiceStatus.getState();
+          // resolve to a concrete key (empty → active) so the credit gate + TTS use the SAME key
+          const keyId = av.keyId || (vs.elevenlabs?.activeId ?? "");
+          const keyExhausted = !!vs.creditsByKey[keyId]?.exhausted;
+          if (av.enabled && !keyExhausted) {
+            // v3 audio-tag directives only apply to the v3 model
+            const tags = av.model === "eleven_v3" ? av.v3Tags : "";
+            speak(m.content, { voiceId: av.voiceId, model: av.model, keyId, tags });
+          }
+        }
       }
     };
     store.addMessage(sessionId, { id: assistantId, role: "assistant", content: "", createdAt: Date.now(), streaming: true });
+
+    // "thinking" = request sent, no token yet — the voice HUD shows this between listening and speaking
+    if (!arrival) store.setThinking(true);
 
     let speakingStarted = false;
     try {
@@ -106,6 +127,7 @@ export function useConversation() {
             case "token":
               if (!speakingStarted) {
                 speakingStarted = true;
+                s.setThinking(false);
                 s.setWispState("speaking");
                 setSpeaking(true);
               }
@@ -139,6 +161,7 @@ export function useConversation() {
       });
     } finally {
       finalizeBubble(assistantId);
+      useJovaStore.getState().setThinking(false);
       useLogStore.getState().addLog({ kind: "server", source: "/api/chat", message: "POST /api/chat → 200" });
       setSpeaking(false);
       // back to present (hovering near) after speaking; idle timer takes it from here

@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useConversation } from "@/lib/conversation/useConversation";
+import { useVoice } from "@/lib/conversation/useVoice";
 
 /** Per-file attachment cap — base64 inflates ~33%, so this keeps a 5-file turn to a sane POST size. */
 export const MAX_ATTACH_BYTES = 8 * 1024 * 1024;
@@ -25,8 +26,14 @@ export function Composer() {
   const fileRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const { send } = useConversation();
+  const { pttStart, pttEnd } = useVoice();
   const micOn = useJovaStore((s) => s.micOn);
+  const listening = useJovaStore((s) => s.listening);
+  const sttPartial = useJovaStore((s) => s.sttPartial);
+  const voiceError = useJovaStore((s) => s.voiceError);
+  const setVoiceError = useJovaStore((s) => s.setVoiceError);
   const target = useJovaStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.target ?? null);
+  const isJova = !target;
   // up to 5 attachments are shared in the store so the chat drag-and-drop can stage them too
   const pendingAttachments = useJovaStore((s) => s.pendingAttachments);
   const addPendingAttachments = useJovaStore((s) => s.addPendingAttachments);
@@ -90,6 +97,13 @@ export function Composer() {
   return (
     <div className="px-3 pb-3 pt-2">
       {notice && <div className="mb-2 text-[11px] text-amber-200/70">{notice}</div>}
+      {voiceError && <div className="mb-2 text-[11px] text-rose-300/80">{voiceError}</div>}
+      {listening && (
+        <div className="mb-2 flex items-center gap-2 text-[11px] text-cyan-200/80">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400 shadow-[0_0_6px_#67e8f9]" />
+          <span className="truncate">{sttPartial || "Listening…"}</span>
+        </div>
+      )}
       {pendingAttachments.length > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-2">
           {pendingAttachments.map((a, i) => (
@@ -123,6 +137,7 @@ export function Composer() {
           ref={taRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onFocus={() => voiceError && setVoiceError(null)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -130,9 +145,29 @@ export function Composer() {
             }
           }}
           rows={1}
-          placeholder={micOn ? "Listening… (mic stub) — or just type" : target ? `Message ${target.teamName}'s ${target.label}…` : "Talk to Jova…"}
+          placeholder={micOn ? "Hands-free on — just talk, or type" : target ? `Message ${target.teamName}'s ${target.label}…` : "Talk to Jova…"}
           className="min-h-[44px] flex-1 resize-none overflow-y-auto rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-[15px] text-white outline-none placeholder:text-white/35 focus:border-cyan-300/40 focus:bg-white/[0.07]"
         />
+        {isJova && (
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId); // keep the release even if the pointer leaves
+              void pttStart();
+            }}
+            onPointerUp={() => void pttEnd()}
+            onPointerCancel={() => void pttEnd()}
+            disabled={micOn}
+            title={micOn ? "Hands-free mic is on" : "Hold to talk"}
+            className={`h-[44px] shrink-0 select-none rounded-xl border px-3 text-lg transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              listening && !micOn
+                ? "border-cyan-300/50 bg-cyan-400/30 text-cyan-50 animate-pulse"
+                : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
+            }`}
+          >
+            🎙
+          </button>
+        )}
         <button
           onClick={submit}
           className="h-[44px] shrink-0 rounded-xl border border-cyan-300/30 bg-cyan-400/20 px-4 text-sm font-medium text-cyan-50 transition hover:bg-cyan-400/30"

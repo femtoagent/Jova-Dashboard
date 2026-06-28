@@ -23,7 +23,6 @@ export function Wisp() {
   const desired = useRef(new THREE.Vector3());
   const camera = useThree((s) => s.camera);
   const focusTeam = useNetworkStore((s) => s.focusTeam);
-  const setChatOpen = useJovaStore((s) => s.setChatOpen);
   const fullMode = useJovaStore((s) => s.fullMode);
   const jovaStyle = useJovaStore((s) => s.jovaStyle);
 
@@ -56,11 +55,10 @@ export function Wisp() {
     });
   });
 
-  // Click Jova directly = talk to her: bring her centre-front and open the chat.
+  // Clicking Jova just returns focus to her — the chat only opens from the 💬 Chat button now.
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     focusTeam(null);
-    setChatOpen(true);
   };
 
   return (

@@ -52,8 +52,16 @@ interface JovaState {
   /** per-thread count of unread incoming messages (arrived while you weren't viewing that thread) */
   unread: Record<string, number>;
   chatOpen: boolean;
-  voiceOn: boolean; // TTS (her voice out) — wired in Phase 4
-  micOn: boolean; // STT (mic in) — wired in Phase 4
+  voiceOn: boolean; // TTS (her voice out)
+  micOn: boolean; // STT hands-free (mic in, continuous auto-send)
+  /** true while the mic is actively capturing (hands-free OR push-to-talk) — drives the listening glow */
+  listening: boolean;
+  /** true between sending a turn and her first token — the "thinking" phase for the voice HUD */
+  thinking: boolean;
+  /** live interim transcript from Deepgram, shown as a preview while she's hearing you */
+  sttPartial: string;
+  /** transient voice error (mic denied / not configured) surfaced near the composer, auto-cleared */
+  voiceError: string | null;
   lastInteraction: number;
   /** staged attachments for the next message (up to 5) — from the composer picker OR drag-and-drop */
   pendingAttachments: OutgoingAttachment[];
@@ -80,6 +88,8 @@ interface JovaState {
   openChatWith: (target: ChatTarget) => string;
   /** return to talking with Jova herself */
   openJovaChat: () => void;
+  /** make Jova's thread active without opening the chat window (for ambient voice); returns its id */
+  ensureJovaActive: () => string;
   /** close one chat thread (keeps at least one Jova thread as home) */
   closeSession: (id: string) => void;
   /** close a whole conversation (all of a person's threads) — agent/Nexus only */
@@ -101,7 +111,12 @@ interface JovaState {
   reconcileReactions: (sessionId: string) => { added: string[]; removed: string[] };
   setChatOpen: (open: boolean) => void;
   toggleVoice: () => void;
+  setVoiceOn: (v: boolean) => void;
   toggleMic: () => void;
+  setListening: (v: boolean) => void;
+  setThinking: (v: boolean) => void;
+  setSttPartial: (text: string) => void;
+  setVoiceError: (msg: string | null) => void;
   /** stage attachments for the next message — appended, then capped at 5 total */
   addPendingAttachments: (atts: OutgoingAttachment[]) => void;
   removePendingAttachment: (index: number) => void;
@@ -160,9 +175,13 @@ export const useJovaStore = create<JovaState>((set, get) => ({
   messages: {},
   unread: {},
   reportedReactions: {},
-  chatOpen: true,
+  chatOpen: false, // starts closed — only the 💬 Chat button (or opening a specific agent) brings it up
   voiceOn: false,
   micOn: false,
+  listening: false,
+  thinking: false,
+  sttPartial: "",
+  voiceError: null,
   lastInteraction: Date.now(),
   pendingAttachments: [],
 
@@ -246,6 +265,22 @@ export const useJovaStore = create<JovaState>((set, get) => ({
       const session: ChatSession = { id, title: "Jova", createdAt: now, updatedAt: now };
       return { sessions: [...st.sessions, session], activeSessionId: id, messages: { ...st.messages, [id]: [] }, chatOpen: true };
     }),
+
+  /** Make Jova's thread the active one WITHOUT opening the chat window — so ambient voice (chat
+   *  collapsed) routes to her, not to whichever agent was last viewed. Returns the session id. */
+  ensureJovaActive: () => {
+    const st = get();
+    const existing = [...st.sessions].reverse().find((s) => !s.target);
+    if (existing) {
+      if (st.activeSessionId !== existing.id) set({ activeSessionId: existing.id });
+      return existing.id;
+    }
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    const session: ChatSession = { id, title: "Jova", createdAt: now, updatedAt: now };
+    set((s) => ({ sessions: [...s.sessions, session], activeSessionId: id, messages: { ...s.messages, [id]: [] } }));
+    return id;
+  },
 
   closeSession: (id) =>
     set((st) => {
@@ -399,7 +434,12 @@ export const useJovaStore = create<JovaState>((set, get) => ({
         : { chatOpen: open }
     ),
   toggleVoice: () => set((st) => ({ voiceOn: !st.voiceOn })),
+  setVoiceOn: (v) => set({ voiceOn: v }),
   toggleMic: () => set((st) => ({ micOn: !st.micOn })),
+  setListening: (v) => set({ listening: v }),
+  setThinking: (v) => set({ thinking: v }),
+  setSttPartial: (text) => set({ sttPartial: text }),
+  setVoiceError: (msg) => set({ voiceError: msg }),
   addPendingAttachments: (atts) =>
     set((st) => ({ pendingAttachments: [...st.pendingAttachments, ...atts].slice(0, 5) })),
   removePendingAttachment: (index) =>

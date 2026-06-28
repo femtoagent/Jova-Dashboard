@@ -29,6 +29,9 @@ dev.log*
 .env.development.local
 .env.production.local
 
+# server-side runtime secrets (UI-managed API keys) — NEVER commit
+secrets.local.json
+
 # typescript
 *.tsbuildinfo
 

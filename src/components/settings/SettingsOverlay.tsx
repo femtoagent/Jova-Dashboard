@@ -14,6 +14,7 @@ import { NexusEditor } from "./NexusEditor";
 import { JovaEditor } from "./JovaEditor";
 import { DocumentsScreen } from "./DocumentsScreen";
 import { ChatScreen } from "./ChatScreen";
+import { VoiceScreen } from "./VoiceScreen";
 
 /** Sits above drei's <Html> z-index range (~16.7M) so 3D labels/radial popups can't bleed through. */
 const OVERLAY_Z = 2_000_000_000;
@@ -77,6 +78,7 @@ export function SettingsOverlay() {
             {screen === "jova" && <JovaEditor />}
             {screen === "documents" && <DocumentsScreen />}
             {screen === "chat" && <ChatScreen />}
+            {screen === "voice" && <VoiceScreen />}
           </div>
         </div>
       </div>
@@ -94,6 +96,7 @@ function TopNav() {
   const showJova = useSettingsStore((s) => s.showJova);
   const showDocuments = useSettingsStore((s) => s.showDocuments);
   const showChat = useSettingsStore((s) => s.showChat);
+  const showVoice = useSettingsStore((s) => s.showVoice);
   // On the "just Jova" screen the network isn't loaded, so only her appearance editor applies.
   const fullMode = useJovaStore((s) => s.fullMode);
   return (
@@ -102,6 +105,7 @@ function TopNav() {
       {fullMode && <NavItem active={screen === "teams" || screen === "team"} onClick={showTeams} label="Teams" />}
       <NavItem active={screen === "jova"} onClick={showJova} label="Jova" />
       <NavItem active={screen === "chat"} onClick={showChat} label="Chat" />
+      <NavItem active={screen === "voice"} onClick={showVoice} label="Voice" />
       <NavItem active={screen === "documents"} onClick={showDocuments} label="Routing" />
       {fullMode && <NavItem active={screen === "nexus"} onClick={showNexus} label="Nexus" />}
       {fullMode && <NavItem active={screen === "logs"} onClick={showLogs} label="Logs" />}
