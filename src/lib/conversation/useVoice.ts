@@ -14,9 +14,16 @@ function audioPrefs() {
   return { inputDeviceId: p.inputDeviceId };
 }
 
-/** Ambient voice always reaches Jova — make her thread active (without popping the chat open) first. */
-function routeToJova() {
-  useJovaStore.getState().ensureJovaActive();
+/**
+ * Decide where the upcoming utterance goes, re-derived at speak time (not baked at mic-start): voice
+ * follows whoever's thread is active — so if you were chatting a character and minimize the chat, your
+ * voice still talks to THEM. Only fall back to Jova when the active thread is hers/targetless or there's
+ * no active thread at all. Re-deriving each utterance means switching threads mid-listen routes right.
+ */
+function routeUtterance() {
+  const st = useJovaStore.getState();
+  const active = st.sessions.find((s) => s.id === st.activeSessionId);
+  if (!active?.target) st.ensureJovaActive();
 }
 
 /**
@@ -54,7 +61,7 @@ export function useVoice() {
         onPartial: (t) => useJovaStore.getState().setSttPartial(t),
         onFinal: (t) => {
           stopSpeaking(); // user just spoke → cut any reply still playing
-          routeToJova();
+          routeUtterance();
           void send(t);
         },
         onError: (msg) => {
@@ -108,7 +115,7 @@ export function useVoice() {
         },
         onPartial: (t) => useJovaStore.getState().setSttPartial(t),
         onFinal: (t) => {
-          routeToJova();
+          routeUtterance();
           void send(t);
         },
         onError: (msg) => {

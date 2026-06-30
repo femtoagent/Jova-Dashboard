@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useVoicePrefs, keyLabel, type FeedbackMode } from "@/lib/settings/useVoicePrefs";
+import { useChatPrefs } from "@/lib/settings/useChatPrefs";
 import { useVoice } from "@/lib/conversation/useVoice";
 import { getInputLevel } from "@/lib/audio/stt";
+import { InlineMd } from "@/lib/markdown";
+import { stripAudioTags } from "@/lib/jova/speechText";
 
 /**
  * The ambient voice surface — how you talk to Jova with the chat closed. Mounted over the scene
@@ -68,9 +71,9 @@ export function VoiceLayer() {
   return (
     <>
       {showFeedback && <VoiceFeedback mode={feedbackMode} />}
-      {triggerMode === "orb" && <VoiceOrb onClick={toggleHandsFree} />}
+      {triggerMode === "orb" && <VoiceOrb onClick={() => toggleHandsFree()} />}
       {triggerMode === "ptt" && <PttHint code={pttKey} />}
-      {triggerMode === "always" && <AlwaysControl onToggle={toggleHandsFree} />}
+      {triggerMode === "always" && <AlwaysControl onToggle={() => toggleHandsFree()} />}
     </>
   );
 }
@@ -177,14 +180,14 @@ function Captions() {
   const listening = useJovaStore((s) => s.listening);
   const thinking = useJovaStore((s) => s.thinking);
   const speaking = useJovaStore((s) => s.wispState === "speaking");
-  const jovaMsgs = useJovaStore((s) => {
-    const sess = [...s.sessions].reverse().find((x) => !x.target);
-    return sess ? s.messages[sess.id] : undefined;
-  });
+  // follow the ACTIVE thread (voice routes there now) so captions match whoever you're talking to
+  const activeMsgs = useJovaStore((s) => (s.activeSessionId ? s.messages[s.activeSessionId] : undefined));
 
-  const msgs = jovaMsgs ?? [];
+  const showAudioTags = useChatPrefs((s) => s.showAudioTags);
+  const msgs = activeMsgs ?? [];
   const lastUser = [...msgs].reverse().find((m) => m.role === "user")?.content ?? "";
-  const lastJova = [...msgs].reverse().find((m) => m.role === "assistant" && m.content.trim())?.content ?? "";
+  const lastReply = [...msgs].reverse().find((m) => m.role === "assistant" && m.content.trim())?.content ?? "";
+  const lastJova = showAudioTags ? lastReply : stripAudioTags(lastReply);
 
   // keep captions up briefly after the turn goes quiet, then fade out
   const active = listening || thinking || speaking;
@@ -206,12 +209,12 @@ function Captions() {
       {youText && (
         <div className="max-w-full rounded-2xl bg-black/35 px-3 py-1.5 text-[13px] text-white/70 backdrop-blur-sm">
           <span className="mr-1.5 text-[10px] uppercase tracking-wider text-white/35">you</span>
-          {youText}
+          <InlineMd text={youText} />
         </div>
       )}
       {lastJova && (
         <div className="max-w-full rounded-2xl bg-cyan-500/10 px-3.5 py-2 text-[15px] text-cyan-50 shadow-[0_0_30px_rgba(34,211,238,0.12)] backdrop-blur-sm">
-          {lastJova}
+          <InlineMd text={lastJova} />
         </div>
       )}
     </div>

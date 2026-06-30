@@ -11,7 +11,7 @@ import { randomUUID } from "crypto";
  * JOVA_SECRETS_FILE. NEVER import this from a client module.
  */
 
-export type Provider = "deepgram" | "elevenlabs";
+export type Provider = "deepgram" | "elevenlabs" | "openrouter";
 
 export interface StoredKey {
   id: string;
@@ -38,7 +38,12 @@ export interface ProviderStatus {
 }
 
 const FILE = process.env.JOVA_SECRETS_FILE || path.join(process.cwd(), "secrets.local.json");
-const ENV_FALLBACK: Record<Provider, string> = { deepgram: "DEEPGRAM_API_KEY", elevenlabs: "ELEVENLABS_API_KEY" };
+const ALL_PROVIDERS: Provider[] = ["deepgram", "elevenlabs", "openrouter"];
+const ENV_FALLBACK: Record<Provider, string> = {
+  deepgram: "DEEPGRAM_API_KEY",
+  elevenlabs: "ELEVENLABS_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+};
 
 /** Accept both the current {keys,activeId} shape and the legacy single {key,name} shape. */
 function normalize(raw: unknown): ProviderEntry | undefined {
@@ -61,10 +66,10 @@ async function readFile(): Promise<SecretsFile> {
   try {
     const raw = JSON.parse(await fs.readFile(FILE, "utf8")) as Record<string, unknown>;
     const out: SecretsFile = {};
-    const dg = normalize(raw.deepgram);
-    const el = normalize(raw.elevenlabs);
-    if (dg) out.deepgram = dg;
-    if (el) out.elevenlabs = el;
+    for (const p of ALL_PROVIDERS) {
+      const e = normalize(raw[p]);
+      if (e) out[p] = e;
+    }
     return out;
   } catch {
     return {}; // missing/corrupt → empty
@@ -73,8 +78,9 @@ async function readFile(): Promise<SecretsFile> {
 
 async function writeFile(data: SecretsFile): Promise<void> {
   const clean: SecretsFile = {};
-  if (data.deepgram?.keys.length) clean.deepgram = data.deepgram;
-  if (data.elevenlabs?.keys.length) clean.elevenlabs = data.elevenlabs;
+  for (const p of ALL_PROVIDERS) {
+    if (data[p]?.keys.length) clean[p] = data[p];
+  }
   await fs.writeFile(FILE, JSON.stringify(clean, null, 2), { mode: 0o600 });
   try {
     await fs.chmod(FILE, 0o600); // tighten perms even if the file pre-existed (no-op on Windows)

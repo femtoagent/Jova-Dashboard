@@ -13,7 +13,7 @@ import React from "react";
  */
 
 const INLINE_RE =
-  /(`[^`]+?`)|(\*\*[\s\S]+?\*\*)|(__[\s\S]+?__)|(\*[\s\S]+?\*)|(_[\s\S]+?_)|(\[[^\]]+?\]\([^)\s]+?\))|((?:https?:\/\/|mailto:)[^\s<]+)/;
+  /(`[^`]+?`)|(\*\*[\s\S]+?\*\*)|(__[\s\S]+?__)|(\*[\s\S]+?\*)|((?<![A-Za-z0-9])_[^_\n]+?_(?![A-Za-z0-9]))|(\[[^\]]+?\]\([^)\s]+?\))|((?:https?:\/\/|mailto:)[^\s<]+)/;
 
 /** Only allow safe link schemes; everything else falls back to literal text. */
 function safeHref(url: string): string | null {
@@ -207,4 +207,10 @@ export function Markdown({ text, className }: { text: string; className?: string
   }
 
   return <div className={`space-y-2 ${className ?? ""}`}>{blocks}</div>;
+}
+
+/** Render inline-only markup (**bold**, *italic*, `code`, links) for a single string — for places
+ *  like the floating voice captions where block layout isn't wanted. */
+export function InlineMd({ text }: { text: string }) {
+  return <>{inline(text ?? "", "inl")}</>;
 }

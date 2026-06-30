@@ -11,6 +11,8 @@ export const MOCK_PRESETS: PresetSummary[] = [
   { slug: "jova-memory", name: "Jova Memory", description: "Memory / embedding routing", status: "active" },
   { slug: "image-light", name: "Image Light", description: "Vision turns — lightweight", status: "active" },
   { slug: "file-medium", name: "File Medium", description: "Document / file turns", status: "active" },
+  { slug: "min", name: "Min", description: "Minimal / lowest-cost routing", status: "active" },
+  { slug: "fren", name: "Fren", description: "Friendly conversational routing", status: "active" },
 ];
 
 const MOCK_CONFIG: Record<string, { systemPrompt?: string; config: Record<string, unknown> }> = {
@@ -18,6 +20,8 @@ const MOCK_CONFIG: Record<string, { systemPrompt?: string; config: Record<string
   "jova-memory": { config: { model: "openai/text-embedding-3-small" } },
   "image-light": { config: { model: "google/gemini-3.1-flash-lite" } },
   "file-medium": { config: { model: "(file-capable model)" } },
+  min: { config: { model: "(minimal model)" } },
+  fren: { config: { model: "(friendly model)" } },
 };
 
 export function mockPresetDetail(slug: string): PresetDetail | null {

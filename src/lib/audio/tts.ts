@@ -19,8 +19,9 @@
  */
 
 import { setSource, setSpeaking, pushLiveAmplitude } from "./amplitude";
+import { AUDIO_TAG_RE } from "@/lib/jova/speechText";
 
-export type SpeakOpts = { voiceId?: string; model?: string; keyId?: string; tags?: string };
+export type SpeakOpts = { voiceId?: string; model?: string; keyId?: string; tags?: string; readItalics?: boolean };
 type QueueItem = { text: string; voiceId: string; model: string; keyId: string };
 
 let ctx: AudioContext | null = null;
@@ -96,7 +97,7 @@ export function setOnSpeechEnd(cb: SpeakEndCb | null): void {
  *  prefix (e.g. "[evil] [faster]") is prepended VERBATIM after the strip so the directives survive. */
 export function speak(text: string, opts?: SpeakOpts): void {
   if (unavailable) return;
-  let clean = stripForSpeech(text);
+  let clean = stripForSpeech(text, { model: opts?.model, readItalics: opts?.readItalics });
   if (!clean) return;
   const tags = opts?.tags?.trim();
   if (tags) clean = `${tags} ${clean}`;
@@ -224,9 +225,29 @@ function endAmplitude(): void {
   setSource("fake"); // hand the wisp's idle/streaming pulse back to the synthesized envelope
 }
 
-/** Turn markdown reply text into something natural to hear: drop syntax, links→label, code→omitted. */
-function stripForSpeech(input: string): string {
+/** Drop *italic* / _italic_ SPANS (the words too) while preserving **bold**, so an agent set to not
+ *  read italics skips asides/actions like *leans in* without that text vanishing from the chat.
+ *  Bold markers are removed FIRST (keeping the words), so after that no ** remains and the single-*
+ *  pass only hits genuine *italic* spans — no fragile sentinel/restore dance needed. */
+function dropItalicSpans(t: string): string {
+  // keep **bold** and __bold__ WORDS (their markers are stripped later in stripForSpeech), so the
+  // italic passes below can't eat bold text
+  t = t.replace(/\*\*([\s\S]*?)\*\*/g, "$1");
+  t = t.replace(/__([\s\S]*?)__/g, "$1");
+  // drop *italic* and _italic_ SPANS (words too); underscore guarded so snake_case / paths aren't eaten
+  t = t.replace(/\*([^*\n]+?)\*/g, " ");
+  t = t.replace(/(?<![A-Za-z0-9])_([^_\n]+?)_(?![A-Za-z0-9])/g, " ");
+  return t;
+}
+
+/** Turn markdown reply text into something natural to hear: drop syntax, links→label, code→omitted.
+ *  v3 keeps inline emphasis tags ("[angry]") as delivery cues; other models strip them. With
+ *  readItalics:false, italic spans are dropped entirely (not just their markers). */
+function stripForSpeech(input: string, opts?: { model?: string; readItalics?: boolean }): string {
   let t = input;
+  // emphasis tags: keep for eleven_v3 (it performs them); strip for any other model so they aren't read aloud
+  if (opts?.model !== "eleven_v3") t = t.replace(AUDIO_TAG_RE, " ");
+  if (opts?.readItalics === false) t = dropItalicSpans(t);
   t = t.replace(/```[\s\S]*?```/g, " "); // fenced code blocks
   t = t.replace(/`([^`]+)`/g, "$1"); // inline code
   t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, " "); // images

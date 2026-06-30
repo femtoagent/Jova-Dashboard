@@ -3,6 +3,17 @@
 import { create } from "zustand";
 import type { ChatMessage, ChatSession, ChatTarget, OutgoingAttachment, Role } from "@/lib/jova/types";
 import { type Mood, type WispType, NEUTRAL_MOOD } from "@/lib/mood";
+import { characterByName } from "@/lib/agents/characters";
+import { useSecretAgents } from "@/lib/agents/useSecretAgents";
+
+/** When a secret character's last open thread is gone, re-hide it (picker/Routing/Voice). */
+function relockIfGone(target: ChatTarget | undefined, sessions: ChatSession[]) {
+  if (!target || target.teamId !== "character") return;
+  const meta = characterByName(target.teamName);
+  if (!meta?.secret) return;
+  const stillOpen = sessions.some((s) => s.target?.teamId === target.teamId && s.target?.agentId === target.agentId);
+  if (!stillOpen) useSecretAgents.getState().relock(meta.name);
+}
 
 /** The four states from the brief — the soul of the wisp. */
 export type WispState = "approaching" | "present" | "speaking" | "receded";
@@ -282,7 +293,8 @@ export const useJovaStore = create<JovaState>((set, get) => ({
     return id;
   },
 
-  closeSession: (id) =>
+  closeSession: (id) => {
+    const closed = get().sessions.find((s) => s.id === id);
     set((st) => {
       const sess = st.sessions.find((s) => s.id === id);
       if (!sess) return {};
@@ -299,9 +311,12 @@ export const useJovaStore = create<JovaState>((set, get) => ({
       let unread = clearUnread(st.unread, id);
       unread = clearPersonUnread(unread, sessions, activeSessionId);
       return { sessions, messages, activeSessionId, unread };
-    }),
+    });
+    relockIfGone(closed?.target, get().sessions);
+  },
 
-  closeConversation: (teamId, agentId) =>
+  closeConversation: (teamId, agentId) => {
+    const closed = get().sessions.find((s) => s.target?.teamId === teamId && s.target?.agentId === agentId);
     set((st) => {
       const match = (s: ChatSession) => s.target?.teamId === teamId && s.target?.agentId === agentId;
       const sessions = st.sessions.filter((s) => !match(s));
@@ -319,7 +334,9 @@ export const useJovaStore = create<JovaState>((set, get) => ({
       }
       unread = clearPersonUnread(unread, sessions, activeSessionId);
       return { sessions, messages, activeSessionId, unread };
-    }),
+    });
+    relockIfGone(closed?.target, get().sessions);
+  },
 
   renameTarget: (teamId, agentId, label) =>
     set((st) => ({

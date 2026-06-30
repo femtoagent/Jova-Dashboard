@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useJovaStore } from "@/lib/state/useJovaStore";
-import { useVoice } from "@/lib/conversation/useVoice";
 import { useVoicePrefs, keyLabel, type TriggerMode, type FeedbackMode } from "@/lib/settings/useVoicePrefs";
 import { useVoiceStatus } from "@/lib/settings/useVoiceStatus";
-import { useAgentVoices } from "@/lib/settings/useAgentVoices";
-import { speak, unlockAudio, setOutputDevice } from "@/lib/audio/tts";
+import { setOutputDevice } from "@/lib/audio/tts";
 import { listAudioDevices, ensureDeviceLabels, canRouteOutput, type AudioDevice } from "@/lib/audio/devices";
 import { VoiceKeysPanel } from "./VoiceKeysPanel";
 import { AgentVoicesPanel } from "./AgentVoicesPanel";
@@ -44,10 +41,7 @@ export function VoiceScreen() {
   const setOutputDeviceId = useVoicePrefs((s) => s.setOutputDevice);
   const hydrate = useVoicePrefs((s) => s.hydrate);
 
-  const voiceOn = useJovaStore((s) => s.voiceOn);
-  const { toggleSpeaker } = useVoice();
   const refreshVoiceStatus = useVoiceStatus((s) => s.refreshAll);
-  const jovaVoice = useAgentVoices((s) => s.forKey("jova"));
 
   const [tab, setTab] = useState<TabKey>("interaction");
   const [devices, setDevices] = useState<{ inputs: AudioDevice[]; outputs: AudioDevice[] }>({ inputs: [], outputs: [] });
@@ -90,13 +84,6 @@ export function VoiceScreen() {
     window.addEventListener("keydown", onKey, { once: true });
     return () => window.removeEventListener("keydown", onKey);
   }, [capturing, setPttKey]);
-
-  const testVoice = () => {
-    unlockAudio();
-    setOutputDevice(outputDeviceId);
-    const tags = jovaVoice.model === "eleven_v3" ? jovaVoice.v3Tags : "";
-    speak("Hey — it's Jova. This is how I sound.", { voiceId: jovaVoice.voiceId, model: jovaVoice.model, keyId: jovaVoice.keyId, tags });
-  };
 
   return (
     <div>
@@ -194,23 +181,6 @@ export function VoiceScreen() {
               </button>
             );
           })}
-        </div>
-      </section>
-
-      {/* Her voice out */}
-      <section className="mb-6">
-        <h3 className="mb-2 text-sm font-semibold text-white/85">Her voice</h3>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-[13px] text-white/75">
-            <input type="checkbox" className="accent-cyan-400" checked={voiceOn} onChange={toggleSpeaker} />
-            Speak her replies aloud
-          </label>
-          <button
-            onClick={testVoice}
-            className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-[12px] text-white/75 transition hover:bg-white/10"
-          >
-            ▶ Test voice
-          </button>
         </div>
       </section>
 

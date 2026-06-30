@@ -32,6 +32,9 @@ dev.log*
 # server-side runtime secrets (UI-managed API keys) — NEVER commit
 secrets.local.json
 
+# server-side agent persona/human version history — NEVER commit
+agent-versions.local.json
+
 # typescript
 *.tsbuildinfo
 

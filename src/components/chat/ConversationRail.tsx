@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import type { ChatSession } from "@/lib/jova/types";
+import { characterByName } from "@/lib/agents/characters";
 import { SessionsView } from "./SessionSwitcher";
+import { NewChatPicker } from "./NewChatPicker";
 
 /** A stable key per PERSON (entity) so multiple threads with the same person collapse to one row. */
 function personKey(s: ChatSession): string {
@@ -12,9 +14,13 @@ function personKey(s: ChatSession): string {
 function shortCode(s: ChatSession): string {
   if (!s.target) return "J";
   if (s.target.teamName === "Nexus") return "Nx";
-  const words = s.target.label.replace(/[^a-zA-Z0-9 ]/g, " ").trim().split(/\s+/).filter(Boolean);
+  // a character keeps its avatar glyph (💀 / 😺) in the circle; others fall back to initials
+  const emoji = characterByName(s.target.teamName)?.emoji;
+  if (emoji) return emoji;
+  const base = s.target.teamId === "character" || !s.target.label ? s.target.teamName : s.target.label;
+  const words = base.replace(/[^a-zA-Z0-9 ]/g, " ").trim().split(/\s+/).filter(Boolean);
   if (words.length >= 2 && words[0] && words[1]) return (words[0][0] + words[1][0]).toUpperCase();
-  return s.target.label.slice(0, 2).toUpperCase();
+  return base.slice(0, 2).toUpperCase();
 }
 
 /** The left rail: one row per PERSON (Jova + each agent + Nexus) for quick switching. A "Sessions ›"
@@ -25,7 +31,7 @@ export function ConversationRail() {
   const switchSession = useJovaStore((s) => s.switchSession);
   const closeConversation = useJovaStore((s) => s.closeConversation);
   const unread = useJovaStore((s) => s.unread);
-  const [mode, setMode] = useState<"conversations" | "sessions">("conversations");
+  const [mode, setMode] = useState<"conversations" | "sessions" | "picker">("conversations");
   const listRef = useRef<HTMLUListElement>(null);
   const [canScrollDown, setCanScrollDown] = useState(false);
 
@@ -61,15 +67,16 @@ export function ConversationRail() {
   }, [persons.length, mode]);
 
   if (mode === "sessions") return <SessionsView onBack={() => setMode("conversations")} />;
+  if (mode === "picker") return <NewChatPicker onClose={() => setMode("conversations")} />;
 
   return (
     <div className="flex w-[150px] shrink-0 flex-col border-r border-white/10 sm:w-[200px]">
-      <div className="flex items-center justify-between border-b border-white/10 py-2 pl-3 pr-1.5">
+      <div className="flex items-center justify-between border-b border-white/10 py-2 pl-3 pr-2">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Conversations</span>
         <button
           onClick={() => setMode("sessions")}
           title="This person's sessions"
-          className="rounded px-1.5 py-0.5 text-[10px] text-white/40 transition hover:bg-white/10 hover:text-white/70"
+          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-white/40 transition hover:bg-white/10 hover:text-white/70"
         >
           Sessions{activeCount > 1 ? ` · ${activeCount}` : ""} ›
         </button>
@@ -90,7 +97,7 @@ export function ConversationRail() {
                   className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pr-5 text-left transition hover:bg-white/10 ${isActive ? "bg-white/10" : ""}`}
                 >
                   <span
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold leading-none"
                     style={{ background: `${c}22`, color: c, border: `1px solid ${isActive ? c : `${c}55`}`, boxShadow: isActive ? `0 0 8px ${c}88` : "none" }}
                   >
                     {shortCode(s)}
@@ -131,6 +138,14 @@ export function ConversationRail() {
           </div>
         )}
       </div>
+
+      <button
+        onClick={() => setMode("picker")}
+        title="New chat — find someone to talk to"
+        className="m-1.5 shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] text-white/70 transition hover:bg-white/10"
+      >
+        + New chat
+      </button>
     </div>
   );
 }

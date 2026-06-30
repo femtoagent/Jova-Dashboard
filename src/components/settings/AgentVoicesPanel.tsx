@@ -8,6 +8,9 @@ import { useJovaStore } from "@/lib/state/useJovaStore";
 import { playPreview, stopPreview } from "@/lib/audio/preview";
 import { unlockAudio, setOutputDevice } from "@/lib/audio/tts";
 import { VOICE_MODELS, type VoiceModel, type VoiceOption } from "@/lib/voice/types";
+import { listAgents } from "@/lib/jova/agents";
+import { characterByName, isSystemAgent, JOVA_AGENT_NAME } from "@/lib/agents/characters";
+import { useIsHidden } from "@/lib/agents/useSecretAgents";
 
 /** Play/stop the catalog sample for a voice; one preview at a time, ▶/⏹ reflects state. Stops on unmount. */
 function usePreview() {
@@ -34,29 +37,55 @@ function usePreview() {
 export function AgentVoicesPanel() {
   const roster = useAgentVoices((s) => s.roster);
   const addAgent = useAgentVoices((s) => s.addAgent);
+  const ensureAgent = useAgentVoices((s) => s.ensureAgent);
+  const pruneStale = useAgentVoices((s) => s.pruneStale);
   const elevenlabs = useVoiceStatus((s) => s.elevenlabs);
   const exhausted = useVoiceStatus((s) => s.exhausted);
+  const hidden = useIsHidden();
 
   const [pickingFor, setPickingFor] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const noKey = !elevenlabs;
 
+  // materialize a voice-roster entry (keyed by the REAL Letta agent id) for every live agent, so
+  // assigning a voice actually routes. Skips Jova (the built-in entry), specialists, and secret
+  // characters until they're unlocked this session — re-runs when an unlock happens (hidden changes).
+  useEffect(() => {
+    let alive = true;
+    listAgents()
+      .then((list) => {
+        if (!alive) return;
+        pruneStale(list.map((a) => a.id)); // drop entries for agents deleted in Letta (clears dupes)
+        for (const a of list) {
+          if (a.name.toLowerCase() === JOVA_AGENT_NAME || isSystemAgent(a.name) || hidden(a.name)) continue;
+          const meta = characterByName(a.name);
+          ensureAgent(a.id, meta?.display ?? a.name, meta?.voice);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [hidden, ensureAgent, pruneStale]);
+
   const picking = pickingFor ? roster.find((a) => a.id === pickingFor) ?? null : null;
   if (picking) return <VoiceBrowser agent={picking} onClose={() => setPickingFor(null)} />;
+
+  const visible = roster.filter((a) => !a.id.startsWith("draft-") && !hidden(a.name));
 
   return (
     <section>
       <h3 className="mb-1 text-sm font-semibold text-white/85">Voices · per agent</h3>
       <p className="mb-3 text-[11px] text-white/40">
-        Jova speaks today. Each voice lives on a specific key — TTS uses the speaking agent&apos;s key. Add agents and pre-assign now;
-        their “Speak” stays off until provisioning is ready.
+        Each voice lives on a specific key — TTS uses the speaking agent&apos;s key. Assign a voice + model, then turn on
+        “Speak” to hear that agent&apos;s replies aloud.
       </p>
 
       {noKey && <div className="mb-2 text-[11px] text-amber-200/60">Add an ElevenLabs key in the API keys tab to choose voices.</div>}
       {exhausted && <div className="mb-2 text-[11px] text-rose-300/70">Active key is out of credits — you can still browse/assign, but speaking is paused.</div>}
 
       <div className="grid gap-2 sm:grid-cols-2">
-        {roster.map((a) => (
+        {visible.map((a) => (
           <AgentCard key={a.id} agent={a} noKey={noKey} onChange={() => setPickingFor(a.id)} />
         ))}
 
@@ -89,9 +118,10 @@ export function AgentVoicesPanel() {
   );
 }
 
-function AgentCard({ agent, noKey, onChange }: { agent: AgentVoice; noKey: boolean; onChange: () => void }) {
+export function AgentCard({ agent, noKey, onChange }: { agent: AgentVoice; noKey: boolean; onChange: () => void }) {
   const setModel = useAgentVoices((s) => s.setModel);
   const setEnabled = useAgentVoices((s) => s.setEnabled);
+  const setReadItalics = useAgentVoices((s) => s.setReadItalics);
   const setV3Tags = useAgentVoices((s) => s.setV3Tags);
   const rename = useAgentVoices((s) => s.rename);
   const removeAgent = useAgentVoices((s) => s.removeAgent);
@@ -100,14 +130,16 @@ function AgentCard({ agent, noKey, onChange }: { agent: AgentVoice; noKey: boole
   const loadVoices = useVoiceStatus((s) => s.loadVoices);
   const { playingId, toggle } = usePreview();
 
-  // Enabling Speak should immediately make her audible — flip the speaker on (and unlock audio on this
-  // click so autoplay allows it). Independent of the chat 🔊/🎤 toggles; disabling doesn't force it off.
+  // Enabling Speak should immediately make this agent audible — unlock audio on this click so autoplay
+  // allows it. voiceOn is JOVA's master switch, so only her card flips it; a character speaks on its own
+  // enabled flag (see useConversation), so enabling Baal never makes Jova start talking. Disabling never
+  // forces voiceOn off. Independent of the chat 🔊/🎤 toggles.
   const onSpeak = (on: boolean) => {
     setEnabled(agent.id, on);
     if (on) {
       unlockAudio();
       setOutputDevice(useVoicePrefs.getState().outputDeviceId);
-      setVoiceOn(true);
+      if (agent.builtin) setVoiceOn(true);
     }
   };
 
@@ -123,14 +155,19 @@ function AgentCard({ agent, noKey, onChange }: { agent: AgentVoice; noKey: boole
 
   const voice = voices.find((v) => v.voiceId === agent.voiceId) ?? null;
   const keyName = elevenlabs?.keys.find((k) => k.id === effKey)?.name ?? "";
-  const accent = agent.builtin ? "#67e8f9" : hueFor(agent.name);
+  const meta = characterByName(agent.name);
+  const accent = agent.builtin ? "#67e8f9" : meta?.color ?? hueFor(agent.name);
+  // built-in (Jova) and real Letta agents route, so their voice actually plays → Speak is enable-able.
+  const canSpeak = !!agent.builtin || !!agent.real;
+  // names are fixed for built-in + real agents (they come from Letta); only placeholders are editable.
+  const fixedName = !!agent.builtin || !!agent.real;
 
   return (
     <div className={`rounded-xl border bg-white/[0.03] p-3 transition ${agent.enabled ? "border-cyan-300/25 shadow-[0_0_24px_rgba(34,211,238,0.08)]" : "border-white/10"}`}>
       <div className="flex items-start gap-2.5">
         <Avatar name={agent.name} color={accent} glow={agent.enabled} />
         <div className="min-w-0 flex-1">
-          {agent.builtin ? (
+          {fixedName ? (
             <div className="text-sm font-semibold text-white/90">{agent.name}</div>
           ) : (
             <input
@@ -145,7 +182,7 @@ function AgentCard({ agent, noKey, onChange }: { agent: AgentVoice; noKey: boole
             {keyName && <span className="rounded bg-white/8 px-1 py-0.5 text-white/45">🔑 {keyName}</span>}
           </div>
         </div>
-        {!agent.builtin && (
+        {!agent.builtin && !agent.real && (
           <button onClick={() => removeAgent(agent.id)} title="Remove agent" className="shrink-0 rounded px-1 text-white/30 transition hover:text-rose-300">
             ×
           </button>
@@ -168,17 +205,29 @@ function AgentCard({ agent, noKey, onChange }: { agent: AgentVoice; noKey: boole
           ))}
         </div>
         <label
-          className={`flex items-center gap-1.5 text-[11px] ${agent.builtin ? "text-white/70" : "cursor-not-allowed text-white/35"}`}
-          title={agent.builtin ? "Jova speaks her replies" : "Speaking turns on once this agent is provisioned"}
+          className={`flex items-center gap-1.5 text-[11px] ${canSpeak ? "text-white/70" : "cursor-not-allowed text-white/35"}`}
+          title={canSpeak ? "Speak this agent's replies aloud" : "Add this agent to chat to enable speaking"}
         >
           <input
             type="checkbox"
             className="accent-cyan-400"
             checked={agent.enabled}
-            disabled={!agent.builtin}
+            disabled={!canSpeak}
             onChange={(e) => onSpeak(e.target.checked)}
           />
           Speak
+        </label>
+        <label
+          className="flex items-center gap-1.5 text-[11px] text-white/70"
+          title="Read italic asides/actions aloud (e.g. *leans in*). Off → skipped in speech but still shown in chat."
+        >
+          <input
+            type="checkbox"
+            className="accent-cyan-400"
+            checked={agent.readItalics !== false}
+            onChange={(e) => setReadItalics(agent.id, e.target.checked)}
+          />
+          Read italics
         </label>
       </div>
 
@@ -216,7 +265,7 @@ function AgentCard({ agent, noKey, onChange }: { agent: AgentVoice; noKey: boole
 }
 
 /** Full-width voice browser for one agent: switch key, search, preview, assign. */
-function VoiceBrowser({ agent, onClose }: { agent: AgentVoice; onClose: () => void }) {
+export function VoiceBrowser({ agent, onClose }: { agent: AgentVoice; onClose: () => void }) {
   const setVoice = useAgentVoices((s) => s.setVoice);
   const elevenlabs = useVoiceStatus((s) => s.elevenlabs);
   const loadVoices = useVoiceStatus((s) => s.loadVoices);

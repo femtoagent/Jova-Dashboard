@@ -22,6 +22,8 @@ export async function health(): Promise<HealthResult> {
 export async function streamChat(params: {
   sessionId: string;
   message: string;
+  /** the REAL Letta agent id to route this turn to (a live character). Omit for Jova / demo targets. */
+  agentId?: string;
   /** up to 5 attachments — images are seen inline by the vision model, files uploaded to her vault */
   attachments?: OutgoingAttachment[];
   /** emoji-reaction config for this turn (gate + reactor preset + incoming likes) */
@@ -35,6 +37,7 @@ export async function streamChat(params: {
     body: JSON.stringify({
       sessionId: params.sessionId,
       message: params.message,
+      agentId: params.agentId,
       attachments: params.attachments,
       reactions: params.reactions,
     }),
@@ -85,13 +88,17 @@ export async function streamSoul(params: {
   prompt: string;
   role?: string;
   name?: string;
+  /** the agent's org team (woven into the generation prompt) */
+  team?: string;
+  /** which block to write — "persona" (identity/voice) or "human" (who they talk to). Default persona. */
+  kind?: "persona" | "human";
   signal?: AbortSignal;
   onEvent: (e: ChatStreamEvent) => void;
 }): Promise<void> {
   const res = await fetch("/api/nexus/soul", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: params.prompt, role: params.role, name: params.name }),
+    body: JSON.stringify({ prompt: params.prompt, role: params.role, name: params.name, team: params.team, kind: params.kind }),
     signal: params.signal,
   });
 

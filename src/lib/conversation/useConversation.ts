@@ -14,6 +14,45 @@ import { useVoiceStatus } from "@/lib/settings/useVoiceStatus";
 import { useHistoryStore } from "@/lib/logs/useHistoryStore";
 import { useLogStore } from "@/lib/logs/useLogStore";
 
+const ARRIVAL_GUARD_KEY = "jova.arrivalGuard";
+const ARRIVAL_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * Rate-limit Jova's unprompted "arrival" greeting so she doesn't keep re-greeting on rapid reloads:
+ * allow up to 2 within a 5-minute window, then suppress further greetings for 5 minutes; ANY greeting
+ * attempt during the cooldown restarts the 5-minute timer. Persisted across reloads (localStorage).
+ */
+function allowArrival(): boolean {
+  if (typeof window === "undefined") return true;
+  const now = Date.now();
+  // validate the persisted shape — tampered/legacy storage must never throw out of here (it runs in send)
+  let times: number[] = [];
+  let suppressUntil = 0;
+  try {
+    const raw = window.localStorage.getItem(ARRIVAL_GUARD_KEY);
+    if (raw) {
+      const g = JSON.parse(raw) as { times?: unknown; suppressUntil?: unknown };
+      if (Array.isArray(g.times)) times = g.times.filter((t): t is number => typeof t === "number");
+      if (typeof g.suppressUntil === "number") suppressUntil = g.suppressUntil;
+    }
+  } catch {}
+  const save = () => {
+    try {
+      window.localStorage.setItem(ARRIVAL_GUARD_KEY, JSON.stringify({ times, suppressUntil }));
+    } catch {}
+  };
+  if (now < suppressUntil) {
+    suppressUntil = now + ARRIVAL_WINDOW_MS; // violation during cooldown → restart the 30-minute timer
+    save();
+    return false;
+  }
+  times = times.filter((t) => now - t < ARRIVAL_WINDOW_MS);
+  times.push(now);
+  if (times.length >= 2) suppressUntil = now + ARRIVAL_WINDOW_MS; // 2nd within 30 min → start the cooldown
+  save();
+  return true;
+}
+
 /**
  * Orchestrates a full turn: user message -> stream Jova's reply -> drive wisp state + mood.
  * Reads/writes the store via getState() so sending doesn't churn React renders on every token
@@ -22,6 +61,8 @@ import { useLogStore } from "@/lib/logs/useLogStore";
 export function useConversation() {
   const send = useCallback(async (text: string, opts?: { arrival?: boolean; attachments?: OutgoingAttachment[] }) => {
     const arrival = opts?.arrival ?? false;
+    // suppress repeated greetings (e.g. fast reloads) — see allowArrival
+    if (arrival && !allowArrival()) return;
     const attachments = opts?.attachments?.length ? opts.attachments.slice(0, 5) : undefined;
     const trimmed = text.trim();
     if (!arrival && !trimmed && !attachments) return;
@@ -35,6 +76,9 @@ export function useConversation() {
     const who = sess?.target ? `${sess.target.teamName} - ${sess.target.label}` : "Jova";
     const teamId = sess?.target?.teamId;
     const agentId = sess?.target?.agentId;
+    // The REAL Letta agent to route to: present only for live agents (characters). Synthetic demo
+    // targets (network nodes, Nexus) have no lettaId, so they still fall back to Jova server-side.
+    const lettaId = sess?.target?.lettaId;
 
     if (!arrival) {
       store.addMessage(sessionId, {
@@ -89,19 +133,23 @@ export function useConversation() {
       s.finalizeMessage(sessionId, msgId);
       if (!arrival && m?.content?.trim()) {
         useHistoryStore.getState().record({ ts: Date.now(), sessionId, who, teamId, agentId, role: "assistant", content: m.content, reasoning: m.reasoning });
-        // Speak her reply aloud when voice is on AND this agent is voice-enabled in the roster (only
-        // Jova by default). Each bubble carries the agent's assigned ElevenLabs voice + model; the TTS
-        // client queues a multi-step reply in order. Skip entirely when out of credits.
-        if (s.voiceOn && m.content.trim()) {
+        // Speak this reply aloud when the agent is voice-enabled in the roster. Master switch differs by
+        // who's talking: Jova uses her global 🔊 (voiceOn); a character uses ONLY its own Speak flag, so
+        // turning on one agent's voice never makes another (e.g. Jova) start talking. Each bubble carries
+        // the agent's assigned ElevenLabs voice + model; the TTS client queues a multi-step reply in order.
+        {
           const av = useAgentVoices.getState().forKey(sess?.target ? sess.target.agentId : "jova");
-          const vs = useVoiceStatus.getState();
-          // resolve to a concrete key (empty → active) so the credit gate + TTS use the SAME key
-          const keyId = av.keyId || (vs.elevenlabs?.activeId ?? "");
-          const keyExhausted = !!vs.creditsByKey[keyId]?.exhausted;
-          if (av.enabled && !keyExhausted) {
-            // v3 audio-tag directives only apply to the v3 model
-            const tags = av.model === "eleven_v3" ? av.v3Tags : "";
-            speak(m.content, { voiceId: av.voiceId, model: av.model, keyId, tags });
+          const masterOn = sess?.target ? av.enabled : s.voiceOn;
+          if (masterOn && av.enabled) {
+            const vs = useVoiceStatus.getState();
+            // resolve to a concrete key (empty → active) so the credit gate + TTS use the SAME key
+            const keyId = av.keyId || (vs.elevenlabs?.activeId ?? "");
+            if (!vs.creditsByKey[keyId]?.exhausted) {
+              // v3 audio-tag directives only apply to the v3 model
+              const tags = av.model === "eleven_v3" ? av.v3Tags : "";
+              // readItalics defaults on; when off, italic asides/actions aren't read aloud (kept in chat)
+              speak(m.content, { voiceId: av.voiceId, model: av.model, keyId, tags, readItalics: av.readItalics !== false });
+            }
           }
         }
       }
@@ -116,6 +164,7 @@ export function useConversation() {
       await streamChat({
         sessionId,
         message: arrival ? ARRIVAL : trimmed,
+        agentId: lettaId,
         attachments,
         reactions,
         onEvent: (e) => {

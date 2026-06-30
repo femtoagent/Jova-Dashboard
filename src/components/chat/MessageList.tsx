@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useChatPrefs } from "@/lib/settings/useChatPrefs";
 import { Markdown } from "@/lib/markdown";
+import { stripAudioTags } from "@/lib/jova/speechText";
 import { Reactions } from "./Reactions";
 import { TypingIndicator } from "./TypingIndicator";
 import type { ChatMessage } from "@/lib/jova/types";
@@ -24,6 +25,7 @@ export function MessageList() {
   const messages = useJovaStore((s) => (activeId ? s.messages[activeId] ?? EMPTY : EMPTY));
   const target = useJovaStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.target ?? null);
   const hydrate = useChatPrefs((s) => s.hydrate);
+  const showAudioTags = useChatPrefs((s) => s.showAudioTags);
   const endRef = useRef<HTMLDivElement>(null);
 
   // pull persisted prefs + the agent->preset map (for reaction gating) once on mount
@@ -35,7 +37,9 @@ export function MessageList() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
-  const agentLabel = target?.label ?? "Jova";
+  // The bubble's sender label is the agent's NAME. For a character that's teamName ("Mira"), not the
+  // subtitle ("nekomimi"); team/network agents keep their role label; no target = Jova.
+  const agentLabel = !target ? "Jova" : target.teamId === "character" ? target.teamName : target.label || target.teamName;
   const agentColor = target?.color;
 
   // Her replies sit in a left-anchored bubble, mirroring the user's — a two-people-messaging look.
@@ -121,7 +125,7 @@ export function MessageList() {
                     )}
                   </div>
                 )}
-                {m.content && <Markdown text={m.content} />}
+                {m.content && <Markdown text={m.role === "assistant" && !showAudioTags ? stripAudioTags(m.content) : m.content} />}
                 {m.streaming && <span className="ml-0.5 inline-block animate-pulse text-cyan-300">▍</span>}
               </div>
             )}

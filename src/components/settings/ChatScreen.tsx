@@ -30,6 +30,8 @@ const hi = "hello";
 export function ChatScreen() {
   const allowlist = useChatPrefs((s) => s.reactionsAllowlist);
   const toggleAllowlist = useChatPrefs((s) => s.toggleAllowlist);
+  const showAudioTags = useChatPrefs((s) => s.showAudioTags);
+  const setShowAudioTags = useChatPrefs((s) => s.setShowAudioTags);
   const hydrate = useChatPrefs((s) => s.hydrate);
   const refreshAgentPresets = useChatPrefs((s) => s.refreshAgentPresets);
 
@@ -68,6 +70,22 @@ export function ChatScreen() {
             <Markdown text={FORMATTING_EXAMPLE} />
           </div>
         </div>
+
+        <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 transition hover:bg-white/[0.05]">
+          <span className="min-w-0">
+            <span className="text-[13px] text-white/85">Show emphasis tags</span>
+            <span className="block text-[11px] text-white/40">
+              v3-voice agents can add delivery cues like <span className="rounded bg-white/10 px-1 font-mono text-[10px]">[angry]</span> that ElevenLabs performs.
+              They&rsquo;re hidden from the transcript by default — turn this on to see them.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={showAudioTags}
+            onChange={(e) => setShowAudioTags(e.target.checked)}
+            className="h-4 w-4 shrink-0 accent-cyan-400"
+          />
+        </label>
       </section>
 
       {/* ---- Reactions ---- */}

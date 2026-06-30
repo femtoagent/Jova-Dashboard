@@ -4,6 +4,10 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useSettingsStore } from "@/lib/settings/useSettingsStore";
 import { useVoice } from "@/lib/conversation/useVoice";
+import { useAgentVoices } from "@/lib/settings/useAgentVoices";
+import { useVoicePrefs } from "@/lib/settings/useVoicePrefs";
+import { unlockAudio, setOutputDevice, stopSpeaking } from "@/lib/audio/tts";
+import { characterByName } from "@/lib/agents/characters";
 import { MessageList } from "./MessageList";
 import { Composer, fileToDataUrl, MAX_ATTACH_BYTES } from "./Composer";
 import { ConversationRail } from "./ConversationRail";
@@ -13,8 +17,9 @@ const MIN_H = 260;
 
 /**
  * The chat: a conversations rail (one row per person) + the active thread. Voice/mic (TTS/STT) show
- * ONLY for Jova; every other agent is text-only. Drag the top handle to resize the height. Dream
- * messages render as a 💭 card; attached images render inline.
+ * for Jova and for standalone characters (the mic routes to whoever you're viewing; the speaker is
+ * that agent's own Speak flag); team agents + Nexus stay text-only. Drag the top handle to resize the
+ * height. Dream messages render as a 💭 card; attached images render inline.
  */
 export function ChatSurface() {
   const chatOpen = useJovaStore((s) => s.chatOpen);
@@ -30,8 +35,28 @@ export function ChatSurface() {
   const openAgent = useSettingsStore((s) => s.openAgent);
   const isJova = !target;
   const accent = target?.color ?? "#67e8f9";
-  // a real team agent (not Jova, not the Nexus orchestrator) can deep-link to its settings screen
-  const editableAgent = target && target.teamId !== "nexus";
+  // a real team agent (not Jova, not Nexus, not a standalone character) can deep-link to its settings
+  const editableAgent = target && target.teamId !== "nexus" && target.teamId !== "character";
+  // standalone characters have no team role, so show just their name (no " - label" when blank)
+  const targetTitle = target ? (target.label ? `${target.teamName} - ${target.label}` : target.teamName) : "Jova";
+  // standalone characters are voice-capable in chat (mic routes to them; speaker = their own Speak flag)
+  const isCharacter = !!target && target.teamId === "character";
+  const charVoice = useAgentVoices((s) => (target ? s.roster.find((r) => r.id === target.agentId) : undefined));
+  const charSpeakOn = !!charVoice?.enabled;
+  const toggleCharSpeak = () => {
+    if (!target) return;
+    const av = useAgentVoices.getState();
+    if (av.roster.find((r) => r.id === target.agentId)?.enabled) {
+      av.setEnabled(target.agentId, false);
+      stopSpeaking();
+    } else {
+      const meta = characterByName(target.teamName);
+      av.ensureAgent(target.agentId, meta?.display ?? target.teamName, meta?.voice);
+      unlockAudio();
+      setOutputDevice(useVoicePrefs.getState().outputDeviceId);
+      av.setEnabled(target.agentId, true);
+    }
+  };
 
   const addPendingAttachments = useJovaStore((s) => s.addPendingAttachments);
 
@@ -141,14 +166,19 @@ export function ChatSurface() {
                   className="truncate text-sm font-semibold transition hover:underline"
                   style={{ color: accent }}
                 >
-                  {`${target.teamName} - ${target.label}`}
+                  {targetTitle}
                 </button>
               ) : (
                 <span className="truncate text-sm font-semibold" style={{ color: target ? accent : "#a5f3fc" }}>
-                  {target ? `${target.teamName} - ${target.label}` : "Jova"}
+                  {targetTitle}
                 </span>
               )}
-              {!isJova && <span className="shrink-0 text-[10px] text-white/35">text</span>}
+              {target?.team && (
+                <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/55" title={`Team: ${target.team}`}>
+                  {target.team}
+                </span>
+              )}
+              {!isJova && !isCharacter && <span className="shrink-0 text-[10px] text-white/35">text</span>}
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5">
@@ -156,7 +186,7 @@ export function ChatSurface() {
                 <>
                   <IconToggle
                     on={micOn}
-                    onClick={toggleHandsFree}
+                    onClick={() => toggleHandsFree()}
                     label="Hands-free mic"
                     hint="Listen continuously and auto-send each utterance"
                     pulse={micOn && listening}
@@ -164,6 +194,22 @@ export function ChatSurface() {
                     🎤
                   </IconToggle>
                   <IconToggle on={voiceOn} onClick={toggleSpeaker} label="Voice" hint="Jova speaks her replies aloud">
+                    🔊
+                  </IconToggle>
+                </>
+              )}
+              {isCharacter && (
+                <>
+                  <IconToggle
+                    on={micOn}
+                    onClick={() => toggleHandsFree()}
+                    label="Hands-free mic"
+                    hint={`Talk to ${target.teamName} by voice — listens and auto-sends`}
+                    pulse={micOn && listening}
+                  >
+                    🎤
+                  </IconToggle>
+                  <IconToggle on={charSpeakOn} onClick={toggleCharSpeak} label="Voice" hint={`${target.teamName} speaks replies aloud`}>
                     🔊
                   </IconToggle>
                 </>
@@ -200,7 +246,7 @@ export function ChatSurface() {
           >
             {dragOver && (
               <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border-2 border-dashed border-cyan-300/60 bg-cyan-400/10 backdrop-blur-sm">
-                <span className="rounded-lg bg-black/50 px-3 py-1.5 text-sm text-cyan-100">Drop images or files for {target ? target.label : "Jova"}</span>
+                <span className="rounded-lg bg-black/50 px-3 py-1.5 text-sm text-cyan-100">Drop images or files for {targetTitle}</span>
               </div>
             )}
             <MessageList />

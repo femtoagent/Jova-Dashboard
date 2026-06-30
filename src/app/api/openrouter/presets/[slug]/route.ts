@@ -1,15 +1,17 @@
 import type { PresetDetail } from "@/lib/jova/openrouter";
 import { mockPresetDetail } from "@/lib/jova/openrouterMock";
+import { getSecret } from "@/lib/server/secrets";
 
 export const runtime = "nodejs";
 
 /**
  * BFF: get one OpenRouter preset's config by slug (its designated version: system prompt + config).
- * Server-only key; mock fallback when absent or on failure.
+ * Reads the UI-managed OpenRouter key (active) with .env fallback — same source as the list route, so a
+ * key added in Settings resolves preset configs too. Mock fallback when absent or on failure.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const key = process.env.OPENROUTER_API_KEY;
+  const key = (await getSecret("openrouter"))?.key;
   const fallback = () => {
     const d = mockPresetDetail(slug);
     return d ? Response.json(d) : new Response("preset not found", { status: 404 });

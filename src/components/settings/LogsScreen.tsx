@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useLogStore, type LogKind, type LogLevel } from "@/lib/logs/useLogStore";
 import { DateRangeBar, inRange, type DateRange } from "./DateRangeBar";
+import { ScrollMore, useScrollMore } from "./ScrollMore";
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
   info: "text-white/55",
@@ -19,13 +20,7 @@ export function LogsScreen() {
   const [range, setRange] = useState<DateRange>({ from: null, to: null });
   const [kind, setKind] = useState<"all" | LogKind>("all");
   const [q, setQ] = useState("");
-  const listRef = useRef<HTMLUListElement>(null);
-  const [more, setMore] = useState(false);
-  const check = () => {
-    const el = listRef.current;
-    if (!el) return;
-    setMore(el.scrollTop + el.clientHeight < el.scrollHeight - 2);
-  };
+  const { scrollRef, more } = useScrollMore();
 
   const ql = q.trim().toLowerCase();
   const filtered = entries.filter(
@@ -34,10 +29,6 @@ export function LogsScreen() {
       inRange(e.ts, range) &&
       (!ql || e.source.toLowerCase().includes(ql) || e.message.toLowerCase().includes(ql))
   );
-
-  useEffect(() => {
-    check();
-  }, [filtered.length, kind, q, range.from, range.to]);
 
   return (
     <div className="flex h-full flex-col">
@@ -71,7 +62,7 @@ export function LogsScreen() {
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <ul ref={listRef} onScroll={check} className="no-scrollbar h-full space-y-1 overflow-y-auto pr-0.5 font-mono text-[11px]">
+        <ul ref={scrollRef} className="no-scrollbar h-full space-y-1 overflow-y-auto pr-0.5 font-mono text-[11px]">
           {filtered.length === 0 && <li className="font-sans text-[12px] text-white/30">No logs in this range.</li>}
           {filtered.map((e) => (
             <li key={e.id} className="flex gap-2 rounded border border-white/5 bg-white/[0.02] px-2 py-1">
@@ -84,11 +75,7 @@ export function LogsScreen() {
             </li>
           ))}
         </ul>
-        {more && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-8 items-end justify-center bg-gradient-to-t from-black/80 to-transparent">
-            <span className="pb-1 text-[10px] text-white/45">▾ more</span>
-          </div>
-        )}
+        <ScrollMore show={more} />
       </div>
     </div>
   );

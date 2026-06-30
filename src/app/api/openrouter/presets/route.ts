@@ -1,15 +1,25 @@
 import type { PresetSummary } from "@/lib/jova/openrouter";
 import { MOCK_PRESETS } from "@/lib/jova/openrouterMock";
+import { getSecret } from "@/lib/server/secrets";
 
 export const runtime = "nodejs";
 
 // OpenRouter has NO "list my presets" endpoint (that path returns the website HTML, not JSON), so we
-// fetch a known set of slugs individually. Override/extend via OPENROUTER_PRESET_SLUGS (comma-sep)
-// when you create new presets in the OpenRouter dashboard.
-const PRESET_SLUGS = (process.env.OPENROUTER_PRESET_SLUGS ?? "file-medium,image-light,jova-memory,jova-conversation")
+// fetch a known set of slugs individually. Defaults come from OPENROUTER_PRESET_SLUGS (comma-sep); the
+// client also passes its user-added slugs via ?slugs= so they're verified + named against OpenRouter.
+const ENV_SLUGS = (process.env.OPENROUTER_PRESET_SLUGS ?? "file-medium,image-light,jova-memory,jova-conversation,min,fren")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+function parseSlugs(req: Request): string[] {
+  const extra = (new URL(req.url).searchParams.get("slugs") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => /^[a-z0-9_-]+$/.test(s))
+    .slice(0, 64); // cap user-supplied slugs so a long list can't fan out into unbounded OpenRouter calls
+  return [...new Set([...ENV_SLUGS, ...extra])];
+}
 
 async function fetchSummary(slug: string, key: string): Promise<PresetSummary | null> {
   try {
@@ -33,14 +43,20 @@ async function fetchSummary(slug: string, key: string): Promise<PresetSummary | 
 }
 
 /**
- * BFF: list OpenRouter presets. Reads OPENROUTER_API_KEY server-side (never the client). Fetches each
- * configured slug by slug (no list API exists). Falls back to mock presets when the key is absent or
- * every fetch fails, so the demo always works.
+ * BFF: list OpenRouter presets. Reads the OpenRouter key from the UI-managed secret store (active key),
+ * falling back to OPENROUTER_API_KEY in .env.local — never exposed to the client. Fetches each slug by
+ * slug (no list API exists). With NO key it returns the sample (mock) list so the demo works and the UI
+ * knows to prompt for one (`mock: true`); with a key it returns the real list as-is — even if empty
+ * (so a misconfigured/revoked key isn't masked behind sample data).
  */
-export async function GET() {
-  const key = process.env.OPENROUTER_API_KEY;
+export async function GET(req: Request) {
+  const sec = await getSecret("openrouter");
+  const key = sec?.key;
+  const slugs = parseSlugs(req);
+  // No key → sample presets so the demo works AND the UI knows to prompt for one (mock: true).
   if (!key) return Response.json({ presets: MOCK_PRESETS, mock: true });
-  const results = await Promise.all(PRESET_SLUGS.map((slug) => fetchSummary(slug, key)));
+  // Key present → the real list, even if empty (don't mask a misconfigured key behind sample data).
+  const results = await Promise.all(slugs.map((slug) => fetchSummary(slug, key)));
   const presets = results.filter((p): p is PresetSummary => p !== null);
-  return presets.length ? Response.json({ presets }) : Response.json({ presets: MOCK_PRESETS, mock: true });
+  return Response.json({ presets });
 }

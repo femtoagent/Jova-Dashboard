@@ -56,6 +56,13 @@ export interface ChatTarget {
   /** role label, e.g. "Product Manager" */
   label: string;
   color: string;
+  /** the org team this agent belongs to (display name), shown in chat. Distinct from `teamName` (which
+   *  for characters is the agent's own display name). Absent for synthetic/Nexus targets. */
+  team?: string;
+  /** The REAL Letta agent id this thread routes to, when it's a live agent (e.g. a character like
+   *  Baal/Mira). Absent for synthetic demo targets (network nodes, Nexus) — those still fall back to
+   *  Jova on the server. The turn is sent to this id; see useConversation -> streamChat -> /api/chat. */
+  lettaId?: string;
 }
 
 /** The Nexus orchestrator as a chat target — distinct from Jova and from team agents. */

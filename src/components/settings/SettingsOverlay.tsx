@@ -12,9 +12,13 @@ import { LogsScreen } from "./LogsScreen";
 import { HistoryScreen } from "./HistoryScreen";
 import { NexusEditor } from "./NexusEditor";
 import { JovaEditor } from "./JovaEditor";
-import { DocumentsScreen } from "./DocumentsScreen";
+import { AgentsScreen } from "./AgentsScreen";
+import { CreateAgentScreen } from "./CreateAgentScreen";
+import { EditAgentScreen } from "./EditAgentScreen";
 import { ChatScreen } from "./ChatScreen";
 import { VoiceScreen } from "./VoiceScreen";
+import { LlmPresetsScreen } from "./LlmPresetsScreen";
+import { ScrollMore, useScrollMore } from "./ScrollMore";
 
 /** Sits above drei's <Html> z-index range (~16.7M) so 3D labels/radial popups can't bleed through. */
 const OVERLAY_Z = 2_000_000_000;
@@ -33,6 +37,10 @@ export function SettingsOverlay() {
   const screen = useSettingsStore((s) => s.screen);
   const closeSettings = useSettingsStore((s) => s.closeSettings);
   const downOnScrim = useRef(false);
+  // "▾ more" hint on the shared scroll container — covers every plain-flow screen. The two screens with
+  // their own inner scroll (Logs, LLM Presets) are h-full here, so this container doesn't scroll for them
+  // (no double hint); they carry their own via the same helper.
+  const { scrollRef, more } = useScrollMore();
 
   useEffect(() => {
     if (!open) return;
@@ -68,7 +76,7 @@ export function SettingsOverlay() {
           >
             ✕
           </button>
-          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          <div ref={scrollRef} className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
             {screen === "teams" && <TeamsAdmin />}
             {screen === "team" && <TeamEditor />}
             {screen === "agent" && <AgentEditor />}
@@ -76,10 +84,14 @@ export function SettingsOverlay() {
             {screen === "history" && <HistoryScreen />}
             {screen === "nexus" && <NexusEditor />}
             {screen === "jova" && <JovaEditor />}
-            {screen === "documents" && <DocumentsScreen />}
+            {screen === "agents" && <AgentsScreen />}
+            {screen === "agentCreate" && <CreateAgentScreen />}
+            {screen === "agentEdit" && <EditAgentScreen />}
+            {screen === "presets" && <LlmPresetsScreen />}
             {screen === "chat" && <ChatScreen />}
             {screen === "voice" && <VoiceScreen />}
           </div>
+          <ScrollMore show={more} />
         </div>
       </div>
     </div>
@@ -94,9 +106,10 @@ function TopNav() {
   const showHistory = useSettingsStore((s) => s.showHistory);
   const showNexus = useSettingsStore((s) => s.showNexus);
   const showJova = useSettingsStore((s) => s.showJova);
-  const showDocuments = useSettingsStore((s) => s.showDocuments);
+  const showAgents = useSettingsStore((s) => s.showAgents);
   const showChat = useSettingsStore((s) => s.showChat);
   const showVoice = useSettingsStore((s) => s.showVoice);
+  const showPresets = useSettingsStore((s) => s.showPresets);
   // On the "just Jova" screen the network isn't loaded, so only her appearance editor applies.
   const fullMode = useJovaStore((s) => s.fullMode);
   return (
@@ -106,7 +119,8 @@ function TopNav() {
       <NavItem active={screen === "jova"} onClick={showJova} label="Jova" />
       <NavItem active={screen === "chat"} onClick={showChat} label="Chat" />
       <NavItem active={screen === "voice"} onClick={showVoice} label="Voice" />
-      <NavItem active={screen === "documents"} onClick={showDocuments} label="Routing" />
+      <NavItem active={screen === "agents" || screen === "agentCreate" || screen === "agentEdit"} onClick={showAgents} label="Agents" />
+      <NavItem active={screen === "presets"} onClick={showPresets} label="LLM Presets" />
       {fullMode && <NavItem active={screen === "nexus"} onClick={showNexus} label="Nexus" />}
       {fullMode && <NavItem active={screen === "logs"} onClick={showLogs} label="Logs" />}
       {fullMode && <NavItem active={screen === "history"} onClick={showHistory} label="Chat history" />}

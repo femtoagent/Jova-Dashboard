@@ -1,5 +1,5 @@
 import type { ChatStreamEvent, OutgoingAttachment, ReactionTurnConfig, StreamedDoc } from "@/lib/jova/types";
-import { generateMockReply, mockReaction, tokenize } from "@/lib/jova/mock";
+import { ARRIVAL, generateMockReply, mockReaction, tokenize } from "@/lib/jova/mock";
 import { config } from "@/lib/config";
 import { streamLetta } from "@/lib/jova/letta";
 import { listDocs } from "@/lib/jova/workshop";
@@ -27,11 +27,14 @@ function toStreamedDoc(path: string, mtime: number): StreamedDoc {
  */
 export async function POST(req: Request) {
   let message = "";
+  let agentId = "";
   let attachments: OutgoingAttachment[] = [];
   let reactions: ReactionTurnConfig | undefined;
   try {
     const body = await req.json();
     message = typeof body?.message === "string" ? body.message : "";
+    // Optional: the real Letta agent id to route this turn to (a live character). Absent = Jova.
+    agentId = typeof body?.agentId === "string" ? body.agentId : "";
     if (Array.isArray(body?.attachments)) {
       attachments = body.attachments
         .filter((a: unknown): a is OutgoingAttachment => {
@@ -68,9 +71,15 @@ export async function POST(req: Request) {
           // Weave the reaction note (the convention + any likes I've added/removed) into the message
           // she reads, so she UNDERSTANDS them and can react back inside her own reasoning. Natural
           // prose, no square brackets (those trip provider prompt-injection filters → 403).
-          let lettaMessage = message;
+          // The unprompted "arrival" turn sends a sentinel, not real text. Forwarding the bare sentinel
+          // gives the model no language/context signal, so DeepSeek tends to default to Chinese. Send a
+          // natural English greeting nudge instead so she opens warmly in English.
+          let lettaMessage =
+            message === ARRIVAL
+              ? "I just opened the app and haven't typed anything yet — say hello back in one short, natural line, in English."
+              : message;
           if (reactions?.note) {
-            lettaMessage = message ? `${message}\n\n${reactions.note}` : reactions.note;
+            lettaMessage = lettaMessage ? `${lettaMessage}\n\n${reactions.note}` : reactions.note;
           }
 
           // Snapshot the vault before the turn so we can detect anything jova-docs files during it.
@@ -85,7 +94,7 @@ export async function POST(req: Request) {
           // Real Jova. streamLetta forwards reasoning/mood immediately and reveals each step's
           // assistant message live (word-by-word) as it arrives. When reactions are enabled it also
           // parses any "React: 🔥" line out of her reasoning and emits it as a `reaction` event.
-          await streamLetta(lettaMessage, send, req.signal, attachments, !!reactions?.enabled);
+          await streamLetta(lettaMessage, send, req.signal, attachments, !!reactions?.enabled, agentId || undefined);
 
           // Push-on-complete: emit a `doc` event for every doc that's new or newer than the snapshot.
           if (before) {

@@ -10,7 +10,7 @@ import type { VoiceModel } from "@/lib/voice/types";
  */
 
 export type AgentVoice = {
-  id: string; // "jova" for the built-in; uuid for added agents
+  id: string; // "jova" for the built-in; the REAL Letta agent id for live agents; uuid for placeholders
   name: string;
   keyId: string; // which stored ElevenLabs key this voice lives on ("" = active/default)
   voiceId: string; // "" = account/server default
@@ -18,7 +18,13 @@ export type AgentVoice = {
   /** v3-only audio-tag prefix prepended to the spoken text, e.g. "[evil] [mockery] [faster]". */
   v3Tags: string;
   enabled: boolean; // speak this agent's replies aloud
+  /** read *italic* asides/actions aloud (default true). Off → italic spans are skipped in speech but
+   *  still shown in chat. */
+  readItalics?: boolean;
   builtin?: boolean; // jova — not removable, on by default
+  /** true when this entry is keyed to a REAL Letta agent id (materialized from listAgents) — its
+   *  voice actually routes (forKey hits on the chat session's lettaId), so Speak is enable-able. */
+  real?: boolean;
 };
 
 const LS_KEY = "jova.agentVoices";
@@ -35,8 +41,15 @@ interface AgentVoicesState {
   setModel: (id: string, model: VoiceModel) => void;
   setV3Tags: (id: string, tags: string) => void;
   setEnabled: (id: string, on: boolean) => void;
+  setReadItalics: (id: string, on: boolean) => void;
   rename: (id: string, name: string) => void;
   addAgent: (name: string) => void;
+  /** materialize an entry keyed by a REAL Letta agent id (idempotent); seeds voice defaults once. */
+  ensureAgent: (id: string, name: string, defaults?: { model?: VoiceModel; v3Tags?: string }) => void;
+  /** re-key a create-flow draft entry (`draft-…`) onto the real agent id once the agent exists. */
+  claimDraft: (draftId: string, realId: string, name?: string) => void;
+  /** drop real-agent entries whose id is no longer a live agent (e.g. deleted in Letta) — clears dupes. */
+  pruneStale: (liveIds: string[]) => void;
   removeAgent: (id: string) => void;
   hydrate: () => void;
 }
@@ -58,6 +71,8 @@ function withJova(roster: Partial<AgentVoice>[]): AgentVoice[] {
     model: a.model ?? DEFAULT_MODEL,
     v3Tags: a.v3Tags ?? "",
     enabled: a.enabled ?? false,
+    readItalics: a.readItalics ?? true,
+    real: a.real ?? false,
   });
   const jova = roster.find((a) => a.id === "jova");
   const rest = roster.filter((a) => a.id !== "jova").map(norm);
@@ -94,6 +109,12 @@ export const useAgentVoices = create<AgentVoicesState>((set, get) => ({
       persist(roster);
       return { roster };
     }),
+  setReadItalics: (id, on) =>
+    set((st) => {
+      const roster = st.roster.map((a) => (a.id === id ? { ...a, readItalics: on } : a));
+      persist(roster);
+      return { roster };
+    }),
   rename: (id, name) =>
     set((st) => {
       const roster = st.roster.map((a) => (a.id === id ? { ...a, name } : a));
@@ -104,6 +125,63 @@ export const useAgentVoices = create<AgentVoicesState>((set, get) => ({
     set((st) => {
       const entry: AgentVoice = { id: crypto.randomUUID(), name: name.trim() || "New agent", keyId: "", voiceId: "", model: DEFAULT_MODEL, v3Tags: "", enabled: false };
       const roster = [...st.roster, entry];
+      persist(roster);
+      return { roster };
+    }),
+  ensureAgent: (id, name, defaults) =>
+    set((st) => {
+      const cur = st.roster.find((a) => a.id === id);
+      if (cur) {
+        // already present — just make sure it's flagged real (so Speak is enable-able) + name in sync,
+        // without clobbering the user's voice/model/tags choices.
+        if (cur.real && cur.name === name) return st;
+        const roster = st.roster.map((a) => (a.id === id ? { ...a, real: true, name } : a));
+        persist(roster);
+        return { roster };
+      }
+      // adopt a manual placeholder with the same name (rewire it to the real id) instead of duplicating —
+      // but NEVER for a create-flow draft id: a draft must be a fresh standalone entry, so opening the
+      // Create voice editor can't consume (and on cancel, destroy) an unrelated same-named placeholder.
+      const norm = (s: string) => s.trim().toLowerCase();
+      const ph = id.startsWith("draft-") ? undefined : st.roster.find((a) => !a.builtin && !a.real && norm(a.name) === norm(name));
+      if (ph) {
+        const roster = st.roster.map((a) => (a.id === ph.id ? { ...a, id, name, real: true } : a));
+        persist(roster);
+        return { roster };
+      }
+      const entry: AgentVoice = {
+        id,
+        name,
+        keyId: "",
+        voiceId: "",
+        model: defaults?.model ?? DEFAULT_MODEL,
+        v3Tags: defaults?.v3Tags ?? "",
+        enabled: false,
+        real: true,
+      };
+      const roster = [...st.roster, entry];
+      persist(roster);
+      return { roster };
+    }),
+  claimDraft: (draftId, realId, name) =>
+    set((st) => {
+      const draft = st.roster.find((a) => a.id === draftId);
+      if (!draft) return st;
+      // re-key the draft onto the real id (dropping any stale entry already at that id), keep its
+      // voice/model/tag choices, and flag it real so it routes + Speak is enable-able.
+      const roster = st.roster
+        .filter((a) => a.id !== realId)
+        .map((a) => (a.id === draftId ? { ...a, id: realId, name: name ?? a.name, real: true } : a));
+      persist(roster);
+      return { roster };
+    }),
+  pruneStale: (liveIds) =>
+    set((st) => {
+      const live = new Set(liveIds);
+      // keep Jova (built-in), manual placeholders (not real), and real entries that still exist live.
+      // Abandoned create-flow drafts (draft-…) are never a live agent → always drop them.
+      const roster = st.roster.filter((a) => a.builtin || (!a.id.startsWith("draft-") && (!a.real || live.has(a.id))));
+      if (roster.length === st.roster.length) return st;
       persist(roster);
       return { roster };
     }),

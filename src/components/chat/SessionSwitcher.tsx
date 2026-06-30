@@ -2,6 +2,7 @@
 
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import type { ChatSession } from "@/lib/jova/types";
+import { characterByName } from "@/lib/agents/characters";
 
 /** A stable key per person (entity). */
 function personKey(s: ChatSession): string {
@@ -10,9 +11,12 @@ function personKey(s: ChatSession): string {
 function shortCode(s: ChatSession): string {
   if (!s.target) return "J";
   if (s.target.teamName === "Nexus") return "Nx";
-  const words = s.target.label.replace(/[^a-zA-Z0-9 ]/g, " ").trim().split(/\s+/).filter(Boolean);
+  const emoji = characterByName(s.target.teamName)?.emoji;
+  if (emoji) return emoji;
+  const base = s.target.teamId === "character" || !s.target.label ? s.target.teamName : s.target.label;
+  const words = base.replace(/[^a-zA-Z0-9 ]/g, " ").trim().split(/\s+/).filter(Boolean);
   if (words.length >= 2 && words[0] && words[1]) return (words[0][0] + words[1][0]).toUpperCase();
-  return s.target.label.slice(0, 2).toUpperCase();
+  return base.slice(0, 2).toUpperCase();
 }
 function relTime(ts: number): string {
   const diff = Math.max(0, Date.now() - ts);
@@ -37,7 +41,11 @@ export function SessionsView({ onBack }: { onBack: () => void }) {
   const active = sessions.find((s) => s.id === activeId) ?? null;
   const key = active ? personKey(active) : "jova";
   const currentTarget = active?.target;
-  const personName = currentTarget ? `${currentTarget.teamName} - ${currentTarget.label}` : "Jova";
+  const personName = currentTarget
+    ? currentTarget.label
+      ? `${currentTarget.teamName} - ${currentTarget.label}`
+      : currentTarget.teamName
+    : "Jova";
   const threads = sessions.filter((s) => personKey(s) === key).sort((a, b) => b.updatedAt - a.updatedAt);
   const c = currentTarget?.color ?? "#67e8f9";
 
@@ -63,7 +71,7 @@ export function SessionsView({ onBack }: { onBack: () => void }) {
                 className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pr-5 text-left transition hover:bg-white/10 ${isActive ? "bg-white/10" : ""}`}
               >
                 <span
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold leading-none"
                   style={{ background: `${c}22`, color: c, border: `1px solid ${isActive ? c : `${c}55`}` }}
                 >
                   {shortCode(s)}
