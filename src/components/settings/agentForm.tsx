@@ -5,8 +5,8 @@ import { listPresets } from "@/lib/jova/openrouter";
 import type { PresetSummary } from "@/lib/jova/openrouter";
 import { useChatPrefs } from "@/lib/settings/useChatPrefs";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
-import { AGENT_FRAMEWORKS } from "@/lib/agents/frameworks";
-import { AGENT_MEMORIES } from "@/lib/agents/memory";
+import { AGENT_FRAMEWORKS, frameworkLabel } from "@/lib/agents/frameworks";
+import { memoriesForFramework, memoryLabel } from "@/lib/agents/memory";
 import { characterByName } from "@/lib/agents/characters";
 
 /** A grouped section with a ruled eyebrow — encodes the agent's anatomy (Soul / Voice & routing). */
@@ -60,6 +60,9 @@ export function SpecField({ label, children }: { label: string; children: React.
 export const inputCls = "w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/40";
 export const selectCls = "rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-[13px] text-white outline-none focus:border-cyan-300/40";
 
+/** The wisp's cyan — the one accent used for every "selected/lit" state across the agent form. */
+export const ACCENT = "#67e8f9";
+
 /** Team dropdown — existing network teams by name, plus "none". Keeps an out-of-list value selectable. */
 export function TeamPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const teams = useNetworkStore((s) => s.teams);
@@ -95,16 +98,45 @@ export function FrameworkPicker({ value, onChange }: { value: string; onChange: 
   );
 }
 
-/** Memory-backend dropdown — which long-term memory the agent uses. Mutable (unlike framework). */
-export function MemoryPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/** Memory-engine picker — the three engines as accent-lit cards (the same dark-glass chrome as the tier
+ *  cards, minus the DepthBars glyph so that signature stays exclusive to tiers). Framework-aware: engines
+ *  that need a specific runtime (Letta archival) only appear for that framework. A stored engine that's
+ *  invalid for the framework still renders as a flagged, selectable card so Edit never silently repoints an
+ *  agent's memory. The card for a `configurable` engine shows a "▾ profile" hint — its panel unfolds below. */
+export function MemoryEngineCards({ value, framework, onChange }: { value: string; framework: string; onChange: (v: string) => void }) {
+  const options = memoriesForFramework(framework);
+  const outOfList = value && !options.some((m) => m.id === value);
+  const cards: { id: string; label: string; description: string; configurable?: boolean; invalid?: boolean }[] = [
+    ...options,
+    ...(outOfList ? [{ id: value, label: memoryLabel(value), description: `Not available on ${frameworkLabel(framework)}.`, invalid: true }] : []),
+  ];
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
-      {AGENT_MEMORIES.map((m) => (
-        <option key={m.id} value={m.id} title={m.description} className="bg-[#0a0f14]">
-          {m.label}
-        </option>
-      ))}
-    </select>
+    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+      {cards.map((m) => {
+        const selected = m.id === value;
+        return (
+          <button
+            key={m.id}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(m.id)}
+            className="flex flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left outline-none transition-all duration-300 hover:border-white/20 focus-visible:border-cyan-300/50 motion-reduce:transition-none"
+            style={selected ? { background: `${ACCENT}16`, borderColor: `${ACCENT}55`, boxShadow: `0 0 22px ${ACCENT}22` } : undefined}
+          >
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: selected ? ACCENT : "rgba(255,255,255,0.7)" }}>
+              {m.label}
+              {m.invalid && <span className="rounded bg-amber-300/15 px-1 py-px text-[8px] tracking-wide text-amber-200/80">n/a</span>}
+            </span>
+            <span className="text-[11px] leading-snug text-white/45">{m.description}</span>
+            {m.configurable && (
+              <span className="mt-0.5 text-[10px] uppercase tracking-wide" style={{ color: selected ? `${ACCENT}cc` : "rgba(255,255,255,0.3)" }}>
+                ▾ profile
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

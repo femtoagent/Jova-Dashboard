@@ -1,6 +1,7 @@
 import { config } from "@/lib/config";
 import { createAgent, deleteAgent, getAgentDetail, listAgents, setAgentPreset, updateAgent, type LettaAgentInfo } from "@/lib/jova/letta";
 import { isProtectedAgent } from "@/lib/agents/characters";
+import { DEFAULT_MEMORY_PROFILE, type MemoryProfile } from "@/lib/agents/memoryProfile";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
     if (id) {
       const a = mockAgents.find((x) => x.id === id);
       if (!a) return Response.json({ error: "not found" }, { status: 404 });
-      return Response.json({ agent: { ...a, persona: "", human: "", framework: "letta", memory: "letta", personaProtected: isProtectedAgent(a.name), humanProtected: isProtectedAgent(a.name) }, mock: true });
+      return Response.json({ agent: { ...a, persona: "", human: "", framework: "letta", memory: "letta", memoryProfile: DEFAULT_MEMORY_PROFILE, personaProtected: isProtectedAgent(a.name), humanProtected: isProtectedAgent(a.name) }, mock: true });
     }
     return Response.json({ agents: mockAgents, mock: true });
   }
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { name?: string; persona?: string; human?: string; preset?: string; role?: string; team?: string; framework?: string; memory?: string };
+  const body = (await req.json().catch(() => ({}))) as { name?: string; persona?: string; human?: string; preset?: string; role?: string; team?: string; framework?: string; memory?: string; memoryProfile?: MemoryProfile };
   const name = (body.name ?? "").trim();
   if (!name) return Response.json({ error: "name required" }, { status: 400 });
 
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
   if (!body.persona?.trim()) return Response.json({ error: "persona required" }, { status: 400 });
   try {
     return Response.json({
-      agent: await createAgent({ name, persona: body.persona, human: body.human, preset: body.preset, role: body.role, team: body.team, framework: body.framework, memory: body.memory }),
+      agent: await createAgent({ name, persona: body.persona, human: body.human, preset: body.preset, role: body.role, team: body.team, framework: body.framework, memory: body.memory, memoryProfile: body.memoryProfile }),
     });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 502 });
@@ -71,6 +72,7 @@ export async function PATCH(req: Request) {
     role?: string;
     team?: string;
     memory?: string;
+    memoryProfile?: MemoryProfile;
     persona?: string;
     human?: string;
   };
@@ -97,6 +99,7 @@ export async function PATCH(req: Request) {
           role: body.role,
           team: body.team,
           memory: body.memory,
+          memoryProfile: body.memoryProfile,
           persona: body.persona,
           human: body.human,
         }),

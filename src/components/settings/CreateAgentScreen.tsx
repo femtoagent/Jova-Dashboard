@@ -6,9 +6,11 @@ import { createAgent } from "@/lib/jova/agents";
 import { claimDraft, setCurrentVersion, type KindHistory } from "@/lib/jova/agentVersions";
 import { useAgentVoices } from "@/lib/settings/useAgentVoices";
 import { DEFAULT_FRAMEWORK } from "@/lib/agents/frameworks";
-import { DEFAULT_MEMORY } from "@/lib/agents/memory";
+import { DEFAULT_MEMORY, defaultMemoryForFramework, isMemoryAllowed } from "@/lib/agents/memory";
+import { DEFAULT_MEMORY_PROFILE, profileForTier, suggestTierForRole, type MemoryProfile } from "@/lib/agents/memoryProfile";
 import { VersionedComposer } from "./VersionedComposer";
-import { Field, FrameworkPicker, MemoryPicker, PresetSelect, TeamPicker, Section, AgentGlyph, SpecField } from "./agentForm";
+import { MemorySection } from "./MemorySection";
+import { Field, FrameworkPicker, PresetSelect, TeamPicker, Section, AgentGlyph, SpecField } from "./agentForm";
 import { AgentVoiceScreen, VoiceSummaryButton } from "./AgentVoiceScreen";
 import { ScrollMore, useScrollMore } from "./ScrollMore";
 
@@ -29,6 +31,8 @@ export function CreateAgentScreen() {
   const [team, setTeam] = useState("");
   const [framework, setFramework] = useState(DEFAULT_FRAMEWORK);
   const [memory, setMemory] = useState(DEFAULT_MEMORY);
+  const [memoryProfile, setMemoryProfile] = useState<MemoryProfile>(DEFAULT_MEMORY_PROFILE);
+  const [profileTouched, setProfileTouched] = useState(false);
   const [preset, setPreset] = useState("");
   const [persona, setPersona] = useState("");
   const [human, setHuman] = useState("");
@@ -56,6 +60,24 @@ export function CreateAgentScreen() {
     setVoiceOpen(true);
   };
 
+  // changing framework can invalidate the chosen engine (Letta archival isn't offered off Letta) — snap
+  // the memory selection to a valid default so we never persist an engine the runtime can't serve.
+  const onFramework = (f: string) => {
+    setFramework(f);
+    if (!isMemoryAllowed(memory, f)) setMemory(defaultMemoryForFramework(f));
+  };
+
+  // switching to the ranked engine reveals the profile; if the user hasn't tuned it, suggest a starting
+  // tier from the role (Marketing/PM → Deep, CX → Light, else Standard) so it lands sensible, not blank.
+  const onMemory = (m: string) => {
+    setMemory(m);
+    if (m === "ranked" && !profileTouched) setMemoryProfile(profileForTier(suggestTierForRole(role)));
+  };
+  const onProfile = (p: MemoryProfile) => {
+    setProfileTouched(true);
+    setMemoryProfile(p);
+  };
+
   const submit = async () => {
     if (!name.trim() || !persona.trim()) {
       setErr("Name and persona are required.");
@@ -64,7 +86,7 @@ export function CreateAgentScreen() {
     setCreating(true);
     setErr(null);
     try {
-      const agent = await createAgent({ name: name.trim(), role: role.trim(), team, framework, memory, persona, human: human.trim() || undefined, preset: preset || undefined });
+      const agent = await createAgent({ name: name.trim(), role: role.trim(), team, framework, memory, memoryProfile, persona, human: human.trim() || undefined, preset: preset || undefined });
       await claimDraft(draftId, agent.id); // migrate the draft version history onto the real id
       // align the stored "current" with exactly what we wrote to the live blocks, so opening Edit on the
       // brand-new agent doesn't show a spurious mismatch (the draft `current` may be trimmed/older)
@@ -111,13 +133,10 @@ export function CreateAgentScreen() {
             />
             <div className="mt-2.5 flex flex-wrap items-end gap-3">
               <SpecField label="Framework">
-                <FrameworkPicker value={framework} onChange={setFramework} />
+                <FrameworkPicker value={framework} onChange={onFramework} />
               </SpecField>
               <SpecField label="Team">
                 <TeamPicker value={team} onChange={setTeam} />
-              </SpecField>
-              <SpecField label="Memory">
-                <MemoryPicker value={memory} onChange={setMemory} />
               </SpecField>
             </div>
           </div>
@@ -159,6 +178,8 @@ export function CreateAgentScreen() {
                 </Field>
               </div>
             </Section>
+
+            <MemorySection value={memory} framework={framework} onChange={onMemory} profile={memoryProfile} onProfileChange={onProfile} />
 
             <Section label="Voice & routing">
               <div className="grid gap-4 sm:grid-cols-2">

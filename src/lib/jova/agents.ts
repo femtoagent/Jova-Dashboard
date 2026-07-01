@@ -1,3 +1,5 @@
+import type { MemoryProfile } from "@/lib/agents/memoryProfile";
+
 /**
  * Client → BFF helpers for per-agent preset routing. The browser only calls our own /api/agents
  * route; the Letta bearer token lives server-side. Mirrors PresetSummary's slug values.
@@ -24,6 +26,8 @@ export interface AgentDetail extends AgentInfo {
   framework: string;
   /** which long-term memory backend the agent uses ("letta" = built-in archival); editable in Edit. */
   memory: string;
+  /** how that memory behaves — the profile the ranked engine reads (editable in Edit). */
+  memoryProfile: MemoryProfile;
   /** core/protected agent → block defaults to read-only (unlockable per-block in the Edit UI). */
   personaProtected: boolean;
   humanProtected: boolean;
@@ -63,6 +67,8 @@ export interface CreateAgentInput {
   framework?: string;
   /** memory-backend id (defaults to "letta" server-side). */
   memory?: string;
+  /** memory profile (kinds/recall/reflection/feed); defaults to Standard server-side. */
+  memoryProfile?: MemoryProfile;
 }
 
 /** Create a new Letta agent (clones the default brain config server-side). Returns the new agent. */
@@ -113,6 +119,7 @@ export async function updateAgent(input: {
   role?: string;
   team?: string;
   memory?: string;
+  memoryProfile?: MemoryProfile;
   persona?: string;
   human?: string;
 }): Promise<AgentInfo> {

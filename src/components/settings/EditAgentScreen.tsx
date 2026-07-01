@@ -7,9 +7,11 @@ import { appendVersion, getVersions, seedIfEmpty, setCurrentVersion, type KindHi
 import { characterByName, isProtectedAgent, isSystemAgent, JOVA_AGENT_NAME } from "@/lib/agents/characters";
 import { frameworkLabel } from "@/lib/agents/frameworks";
 import { DEFAULT_MEMORY } from "@/lib/agents/memory";
+import { DEFAULT_MEMORY_PROFILE, type MemoryProfile } from "@/lib/agents/memoryProfile";
 import { useAgentVoices } from "@/lib/settings/useAgentVoices";
 import { VersionedComposer } from "./VersionedComposer";
-import { Field, MemoryPicker, PresetSelect, TeamPicker, Section, AgentGlyph, SpecField } from "./agentForm";
+import { MemorySection } from "./MemorySection";
+import { Field, PresetSelect, TeamPicker, Section, AgentGlyph, SpecField } from "./agentForm";
 import { AgentVoiceScreen, VoiceSummaryButton } from "./AgentVoiceScreen";
 import { ScrollMore, useScrollMore } from "./ScrollMore";
 
@@ -30,6 +32,7 @@ export function EditAgentScreen() {
   const [role, setRole] = useState("");
   const [team, setTeam] = useState("");
   const [memory, setMemory] = useState(DEFAULT_MEMORY);
+  const [memoryProfile, setMemoryProfile] = useState<MemoryProfile>(DEFAULT_MEMORY_PROFILE);
   const [preset, setPreset] = useState("");
   const [origPreset, setOrigPreset] = useState("");
   const [persona, setPersona] = useState("");
@@ -85,6 +88,7 @@ export function EditAgentScreen() {
         setRole(d.role);
         setTeam(d.team);
         setMemory(d.memory);
+        setMemoryProfile(d.memoryProfile);
         setPreset(d.preset);
         setOrigPreset(d.preset);
         setPersona(d.persona);
@@ -156,6 +160,7 @@ export function EditAgentScreen() {
         role,
         team,
         memory,
+        memoryProfile,
         persona: personaRO ? undefined : persona,
         human: humanRO ? undefined : human,
       });
@@ -268,9 +273,6 @@ export function EditAgentScreen() {
                   <SpecField label="Team">
                     <TeamPicker value={team} onChange={setTeam} />
                   </SpecField>
-                  <SpecField label="Memory">
-                    <MemoryPicker value={memory} onChange={setMemory} />
-                  </SpecField>
                 </div>
               </div>
             </div>
@@ -325,6 +327,8 @@ export function EditAgentScreen() {
                     </Field>
                   </div>
                 </Section>
+
+                <MemorySection value={memory} framework={detail.framework} onChange={setMemory} profile={memoryProfile} onProfileChange={setMemoryProfile} />
 
                 <Section label="Voice & routing">
                   <div className="grid gap-4 sm:grid-cols-2">

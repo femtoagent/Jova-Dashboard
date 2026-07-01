@@ -2,6 +2,7 @@ import type { ChatStreamEvent, OutgoingAttachment } from "@/lib/jova/types";
 import { characterByName, isProtectedAgent, isSystemAgent } from "@/lib/agents/characters";
 import { DEFAULT_FRAMEWORK } from "@/lib/agents/frameworks";
 import { DEFAULT_MEMORY } from "@/lib/agents/memory";
+import { parseMemoryProfile, serializeMemoryProfile, type MemoryProfile } from "@/lib/agents/memoryProfile";
 
 /**
  * Server-only Letta client (the live half of the BFF seam — see CONNECTING.md §3).
@@ -55,6 +56,8 @@ export interface LettaAgentDetail extends LettaAgentInfo {
   framework: string;
   /** which long-term memory backend the agent uses (metadata.memory); "letta" = built-in archival. */
   memory: string;
+  /** how that memory behaves (metadata.memoryProfile) — kinds kept, recall cadence, reflection, feed. */
+  memoryProfile: MemoryProfile;
   /** core/protected agent (Jova, system, memory keepers) → block defaults to read-only, unlockable in the UI. */
   personaProtected: boolean;
   humanProtected: boolean;
@@ -270,6 +273,7 @@ export async function getAgentDetail(agentId: string): Promise<LettaAgentDetail>
   const meta = (a.metadata && typeof a.metadata === "object" ? a.metadata : {}) as Record<string, unknown>;
   const framework = typeof meta.framework === "string" && meta.framework.trim() ? meta.framework.trim().toLowerCase() : DEFAULT_FRAMEWORK;
   const memory = typeof meta.memory === "string" && meta.memory.trim() ? meta.memory.trim().toLowerCase() : DEFAULT_MEMORY;
+  const memoryProfile = parseMemoryProfile(meta.memoryProfile); // tolerant: string / object / absent → valid profile
 
   // Persona is the "persona" block (characters) OR "persona_core" (Jova / sleeptime — their locked core
   // identity). The Letta `read_only` flag can't drive editability here (even character personas are
@@ -306,6 +310,7 @@ export async function getAgentDetail(agentId: string): Promise<LettaAgentDetail>
     team,
     framework,
     memory,
+    memoryProfile,
     persona,
     human,
     personaProtected: core,
@@ -383,6 +388,8 @@ export interface CreateAgentInput {
   framework?: string;
   /** memory-backend id, stored in agent metadata; defaults to "letta" (built-in archival) */
   memory?: string;
+  /** memory profile (kinds/recall/reflection/feed), stored as JSON in metadata; defaults to Standard */
+  memoryProfile?: MemoryProfile;
 }
 
 /**
@@ -440,12 +447,14 @@ export async function createAgent(input: CreateAgentInput): Promise<LettaAgentIn
     description: "Internal routing config (ignore).",
   });
 
-  // role + team + framework + memory ride in agent metadata (Letta accepts metadata on create)
+  // role + team + framework + memory (+ its profile) ride in agent metadata (Letta accepts metadata on
+  // create). The profile is stored as a JSON string so it survives any string-coercing metadata handling.
   const metadata = {
     role: input.role?.trim() ?? "",
     team: input.team?.trim() ?? "",
     framework: input.framework?.trim() || DEFAULT_FRAMEWORK,
     memory: input.memory?.trim() || DEFAULT_MEMORY,
+    memoryProfile: serializeMemoryProfile(parseMemoryProfile(input.memoryProfile)),
   };
 
   const post = async (body: Record<string, unknown>) =>
@@ -493,6 +502,7 @@ export interface UpdateAgentInput {
   role?: string;
   team?: string;
   memory?: string;
+  memoryProfile?: MemoryProfile;
   persona?: string;
   human?: string;
 }
@@ -516,12 +526,13 @@ export async function updateAgent(input: UpdateAgentInput): Promise<LettaAgentIn
   // 1) name + metadata (role/team) — merge metadata so we don't clobber other keys
   const patch: Record<string, unknown> = {};
   if (renamed) patch.name = newName;
-  if (input.role !== undefined || input.team !== undefined || input.memory !== undefined) {
+  if (input.role !== undefined || input.team !== undefined || input.memory !== undefined || input.memoryProfile !== undefined) {
     patch.metadata = {
       ...curMeta,
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.team !== undefined ? { team: input.team } : {}),
       ...(input.memory !== undefined ? { memory: input.memory } : {}),
+      ...(input.memoryProfile !== undefined ? { memoryProfile: serializeMemoryProfile(parseMemoryProfile(input.memoryProfile)) } : {}),
     };
   }
   if (Object.keys(patch).length) {
