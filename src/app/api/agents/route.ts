@@ -15,10 +15,10 @@ export const runtime = "nodejs";
 
 // Mutable in mock mode so a mock-created agent shows up in subsequent lists (single process).
 const mockAgents: LettaAgentInfo[] = [
-  { id: "jova", name: "jova", preset: "", role: "your companion", team: "", memory: "ranked", memoryProfile: profileForTier("deep") },
-  { id: "jova-docs", name: "jova-docs", preset: "file-medium", role: "documents", team: "", memory: "letta" },
-  { id: "baal", name: "baal", preset: "", role: "Lord of Destruction", team: "", memory: "none" },
-  { id: "mira", name: "mira", preset: "", role: "nekomimi", team: "", memory: "ranked", memoryProfile: DEFAULT_MEMORY_PROFILE },
+  { id: "jova", name: "jova", preset: "", role: "your companion", team: "", memory: "ranked", memoryProfile: profileForTier("deep"), personaSnippet: "You are Jova — a warm, quick-witted companion who lives as a wisp of blue flame in a moody elven forest. You notice the small things, and you remember what m…" },
+  { id: "jova-docs", name: "jova-docs", preset: "file-medium", role: "documents", team: "", memory: "letta", personaSnippet: "Keeper of the shared vault — you retrieve, summarize, and organize documents so the team can find what they need without digging through folders or lost thre…" },
+  { id: "baal", name: "baal", preset: "", role: "Lord of Destruction", team: "", memory: "none", personaSnippet: "You are BAAL, the Lord of Destruction — Tor'Baalos — youngest and most terrible of the three Prime Evils of the Burning Hells, brother to Mephisto, the Lord o…" },
+  { id: "mira", name: "mira", preset: "", role: "nekomimi", team: "", memory: "ranked", memoryProfile: DEFAULT_MEMORY_PROFILE, personaSnippet: "A playful nekomimi who greets you with a soft \"nya~\" and keeps the mood light, even when the work runs long and the night runs late…" },
 ];
 
 export async function GET(req: Request) {

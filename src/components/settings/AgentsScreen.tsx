@@ -176,7 +176,7 @@ function AgentRow({ agent, view, voice, onEdit }: { agent: AgentInfo; view: View
           )}
           {protectedAgent && <span className="shrink-0 rounded bg-white/8 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-white/40">core</span>}
         </div>
-        {role && <div className="truncate text-[11px] text-white/40">{role}…</div>}
+        {role && <div className="truncate text-[11px] text-white/40">{role}</div>}
 
         {view === "detailed" && (
           <>

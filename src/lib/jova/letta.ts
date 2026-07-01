@@ -74,11 +74,13 @@ function blocksOf(a: Record<string, unknown>): Array<Record<string, unknown>> {
   return Array.isArray(b) ? (b as Array<Record<string, unknown>>) : [];
 }
 
-/** First ~160 chars of the persona/persona_core block, whitespace-collapsed, for the list snippet. */
+/** First ~160 chars of the persona/persona_core block, whitespace-collapsed, for the list snippet —
+ *  trailing "…" only when it was actually truncated, so a short persona reads as complete. */
 function personaSnippetFrom(blocks: Array<Record<string, unknown>>): string {
   const b = blocks.find((x) => x.label === "persona") ?? blocks.find((x) => x.label === "persona_core");
   const v = b && typeof b.value === "string" ? b.value : "";
-  return v.replace(/\s+/g, " ").trim().slice(0, 160);
+  const collapsed = v.replace(/\s+/g, " ").trim();
+  return collapsed.length > 160 ? collapsed.slice(0, 160).trimEnd() + "…" : collapsed;
 }
 
 /** Resolve an agent's role/team from its Letta `metadata`, falling back to the character registry for
