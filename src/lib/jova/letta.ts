@@ -46,6 +46,10 @@ export interface LettaAgentInfo {
   team: string;
   /** a short snippet of the persona block, for the list's detailed view (from the list endpoint's blocks). */
   personaSnippet?: string;
+  /** long-term memory engine (metadata.memory); "letta" archival by default. For the list's detailed view. */
+  memory?: string;
+  /** how that memory behaves (metadata.memoryProfile) — engine + tier shown in the detailed view. */
+  memoryProfile?: MemoryProfile;
 }
 
 /** Full agent detail incl. its persona + human memory-block text (for the Edit screen). */
@@ -172,6 +176,7 @@ export async function listAgents(): Promise<LettaAgentInfo[]> {
     .map((a) => {
       const name = String(a.name ?? "");
       const { role, team } = roleTeamFor(name, a.metadata);
+      const meta = (a.metadata && typeof a.metadata === "object" ? a.metadata : {}) as Record<string, unknown>;
       return {
         id: String(a.id ?? ""),
         name,
@@ -179,6 +184,9 @@ export async function listAgents(): Promise<LettaAgentInfo[]> {
         role,
         team,
         personaSnippet: personaSnippetFrom(blocksOf(a)),
+        // best-effort from list metadata (may be absent → defaults); the Edit screen is authoritative
+        memory: typeof meta.memory === "string" && meta.memory.trim() ? meta.memory.trim().toLowerCase() : DEFAULT_MEMORY,
+        memoryProfile: parseMemoryProfile(meta.memoryProfile),
       };
     })
     .filter((a) => a.id);

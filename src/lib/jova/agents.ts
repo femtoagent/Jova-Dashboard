@@ -16,6 +16,10 @@ export interface AgentInfo {
   team: string;
   /** short persona snippet for the list's detailed view. */
   personaSnippet?: string;
+  /** long-term memory engine (metadata.memory) — shown in the list's detailed view. */
+  memory?: string;
+  /** how that memory behaves — engine + tier shown in the detailed view. */
+  memoryProfile?: MemoryProfile;
 }
 
 /** Full agent detail incl. its persona + human memory-block text (for the Edit screen). */

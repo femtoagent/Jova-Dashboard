@@ -1,7 +1,7 @@
 import { config } from "@/lib/config";
 import { createAgent, deleteAgent, getAgentDetail, listAgents, setAgentPreset, updateAgent, type LettaAgentInfo } from "@/lib/jova/letta";
 import { isProtectedAgent } from "@/lib/agents/characters";
-import { DEFAULT_MEMORY_PROFILE, type MemoryProfile } from "@/lib/agents/memoryProfile";
+import { DEFAULT_MEMORY_PROFILE, profileForTier, type MemoryProfile } from "@/lib/agents/memoryProfile";
 
 export const runtime = "nodejs";
 
@@ -15,10 +15,10 @@ export const runtime = "nodejs";
 
 // Mutable in mock mode so a mock-created agent shows up in subsequent lists (single process).
 const mockAgents: LettaAgentInfo[] = [
-  { id: "jova", name: "jova", preset: "", role: "your companion", team: "" },
-  { id: "jova-docs", name: "jova-docs", preset: "file-medium", role: "documents", team: "" },
-  { id: "baal", name: "baal", preset: "", role: "Lord of Destruction", team: "" },
-  { id: "mira", name: "mira", preset: "", role: "nekomimi", team: "" },
+  { id: "jova", name: "jova", preset: "", role: "your companion", team: "", memory: "ranked", memoryProfile: profileForTier("deep") },
+  { id: "jova-docs", name: "jova-docs", preset: "file-medium", role: "documents", team: "", memory: "letta" },
+  { id: "baal", name: "baal", preset: "", role: "Lord of Destruction", team: "", memory: "none" },
+  { id: "mira", name: "mira", preset: "", role: "nekomimi", team: "", memory: "ranked", memoryProfile: DEFAULT_MEMORY_PROFILE },
 ];
 
 export async function GET(req: Request) {

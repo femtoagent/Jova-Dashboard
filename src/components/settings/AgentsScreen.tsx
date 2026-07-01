@@ -7,6 +7,8 @@ import { useVoiceStatus } from "@/lib/settings/useVoiceStatus";
 import { useSettingsStore } from "@/lib/settings/useSettingsStore";
 import { useIsHidden } from "@/lib/agents/useSecretAgents";
 import { characterByName, isProtectedAgent } from "@/lib/agents/characters";
+import { memoryLabel, DEFAULT_MEMORY } from "@/lib/agents/memory";
+import { tierOf, MEMORY_TIERS, type MemoryProfile } from "@/lib/agents/memoryProfile";
 
 function glyph(name: string): string {
   const meta = characterByName(name);
@@ -174,14 +176,18 @@ function AgentRow({ agent, view, voice, onEdit }: { agent: AgentInfo; view: View
           )}
           {protectedAgent && <span className="shrink-0 rounded bg-white/8 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-white/40">core</span>}
         </div>
-        {role && <div className="truncate text-[11px] text-white/40">{role}</div>}
+        {role && <div className="truncate text-[11px] text-white/40">{role}…</div>}
 
         {view === "detailed" && (
           <>
             {agent.personaSnippet && <div className="mt-1 line-clamp-2 text-[11px] leading-snug text-white/45">{agent.personaSnippet}</div>}
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-white/40">
-              <span className="rounded bg-white/8 px-1.5 py-0.5">{agent.preset || "default · jova-conversation"}</span>
-              <span>{voiceLabel}</span>
+            {/* spec strip — the agent's configured capabilities at a glance */}
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              <Facet label="Preset">{agent.preset || "default · jova-conversation"}</Facet>
+              <Facet label="Memory">
+                <MemoryTag memory={agent.memory} profile={agent.memoryProfile} />
+              </Facet>
+              <Facet label="Voice">{voiceLabel}</Facet>
             </div>
           </>
         )}
@@ -194,5 +200,46 @@ function AgentRow({ agent, view, voice, onEdit }: { agent: AgentInfo; view: View
         Edit
       </button>
     </div>
+  );
+}
+
+/** A labeled facet in the detailed-view spec strip — a micro uppercase label beside its value. */
+function Facet({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-[9px] uppercase tracking-wider text-white/25">{label}</span>
+      <span className="text-[10px] text-white/55">{children}</span>
+    </span>
+  );
+}
+
+/** The memory facet. Ranked is the "smart" engine, so it earns the cyan accent + a depth glyph for its
+ *  tier; archival / none stay quiet. Reuses the memory-profile editor's rising-bars signature so the two
+ *  surfaces read as one system. */
+function MemoryTag({ memory, profile }: { memory?: string; profile?: MemoryProfile }) {
+  const engine = (memory || DEFAULT_MEMORY).toLowerCase();
+  if (engine !== "ranked") return <span>{memoryLabel(engine)}</span>;
+  const tier = profile ? tierOf(profile) : "standard";
+  const named = MEMORY_TIERS.find((t) => t.id === tier);
+  return (
+    <span className="inline-flex items-center gap-1.5 text-cyan-200/85">
+      <MiniBars depth={named?.depth ?? 3 /* custom sits above the presets */} />
+      Ranked · {named?.label ?? "Custom"}
+    </span>
+  );
+}
+
+/** A tiny rising bar glyph (1–3 lit to depth) — the tier signature, sized for a chip. */
+function MiniBars({ depth }: { depth: number }) {
+  return (
+    <span className="inline-flex h-3 items-end gap-[2px]" aria-hidden>
+      {[1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className="w-[3px] rounded-[1px]"
+          style={{ height: 2 + i * 3, background: i <= depth ? "#67e8f9" : "rgba(255,255,255,0.15)" }}
+        />
+      ))}
+    </span>
   );
 }
