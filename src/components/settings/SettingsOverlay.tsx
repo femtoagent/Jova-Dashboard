@@ -18,6 +18,7 @@ import { EditAgentScreen } from "./EditAgentScreen";
 import { ChatScreen } from "./ChatScreen";
 import { VoiceScreen } from "./VoiceScreen";
 import { LlmPresetsScreen } from "./LlmPresetsScreen";
+import { MemoryReviewScreen } from "./MemoryReviewScreen";
 import { ScrollMore, useScrollMore } from "./ScrollMore";
 
 /** Sits above drei's <Html> z-index range (~16.7M) so 3D labels/radial popups can't bleed through. */
@@ -88,6 +89,7 @@ export function SettingsOverlay() {
             {screen === "agentCreate" && <CreateAgentScreen />}
             {screen === "agentEdit" && <EditAgentScreen />}
             {screen === "presets" && <LlmPresetsScreen />}
+            {screen === "memoryReview" && <MemoryReviewScreen />}
             {screen === "chat" && <ChatScreen />}
             {screen === "voice" && <VoiceScreen />}
           </div>
@@ -110,6 +112,7 @@ function TopNav() {
   const showChat = useSettingsStore((s) => s.showChat);
   const showVoice = useSettingsStore((s) => s.showVoice);
   const showPresets = useSettingsStore((s) => s.showPresets);
+  const showMemoryReview = useSettingsStore((s) => s.showMemoryReview);
   // On the "just Jova" screen the network isn't loaded, so only her appearance editor applies.
   const fullMode = useJovaStore((s) => s.fullMode);
   return (
@@ -121,6 +124,8 @@ function TopNav() {
       <NavItem active={screen === "voice"} onClick={showVoice} label="Voice" />
       <NavItem active={screen === "agents" || screen === "agentCreate" || screen === "agentEdit"} onClick={showAgents} label="Agents" />
       <NavItem active={screen === "presets"} onClick={showPresets} label="LLM Presets" />
+      <NavItem active={screen === "memoryReview"} onClick={showMemoryReview} label="Memory" />
+
       {fullMode && <NavItem active={screen === "nexus"} onClick={showNexus} label="Nexus" />}
       {fullMode && <NavItem active={screen === "logs"} onClick={showLogs} label="Logs" />}
       {fullMode && <NavItem active={screen === "history"} onClick={showHistory} label="Chat history" />}

@@ -17,7 +17,8 @@ export type SettingsScreen =
   | "agentEdit"
   | "chat"
   | "voice"
-  | "presets";
+  | "presets"
+  | "memoryReview";
 
 /** Sections of the per-agent screen (its own left-nav while drilled into an agent). */
 export type AgentSection = "identity" | "tools" | "skills" | "memory" | "access";
@@ -45,6 +46,7 @@ interface SettingsState {
   showChat: () => void;
   showVoice: () => void;
   showPresets: () => void;
+  showMemoryReview: () => void;
   /** open the Create-agent screen (rail kept) */
   showAgentCreate: () => void;
   /** open the Edit screen for a real Letta agent (rail kept) */
@@ -81,6 +83,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   showChat: () => set({ screen: "chat" }),
   showVoice: () => set({ screen: "voice" }),
   showPresets: () => set({ screen: "presets" }),
+  showMemoryReview: () => set({ screen: "memoryReview" }),
   showAgentCreate: () => set({ screen: "agentCreate", focusAgentId: null }),
   showAgentEdit: (agentId) => set({ screen: "agentEdit", focusAgentId: agentId }),
   showTeam: (teamId) => set({ screen: "team", teamId, agentId: null }),
