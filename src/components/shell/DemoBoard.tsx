@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
 import { useDocStore } from "@/lib/docs/useDocStore";
 import type { Demo, Team } from "@/lib/network/types";
-import { ArrowSquareOut, ProjectorScreen, X } from "@phosphor-icons/react";
+import { ArrowSquareOut, Play, ProjectorScreen, X } from "@phosphor-icons/react";
 
 /**
- * The demo board on the wall — lights up when the team has something to SHOW you. Clicking it
- * opens a modal describing each demo with a link: vault paths open in the existing DocPanel,
- * http(s) links open in a new tab.
+ * The office TV on the wall. OFF when there's nothing to show — a dark screen with a standby
+ * LED, pure set dressing. When the team readies a demo it TURNS ON: glow, play glyph, the
+ * demo title as a slow ticker, and an "on air" lamp above the bezel. Tap → the demo modal
+ * (vault paths open in the DocPanel, http links open in a new tab).
  */
-export function DemoBoard({ team }: { team: Team }) {
+export function DemoBoard({ team, style }: { team: Team; style?: CSSProperties }) {
   // select the stable array, filter OUTSIDE the selector (a filtering selector returns a fresh
   // array every snapshot and loops the render)
   const allDemos = useNetworkStore((s) => s.demos);
@@ -28,26 +29,61 @@ export function DemoBoard({ team }: { team: Team }) {
     <>
       <button
         data-demo-board
+        data-on={has ? "true" : "false"}
         onClick={(e) => {
           e.stopPropagation();
           if (has) setOpen(true);
         }}
         disabled={!has}
-        title={has ? `${demos.length} demo${demos.length === 1 ? "" : "s"} ready to show you` : "No demos yet"}
-        className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 transition ${
-          has
-            ? "border-emerald-300/40 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/20"
-            : "cursor-default border-line bg-[#0d1120]/90 text-faint"
-        }`}
-        style={{ boxShadow: has ? "0 0 16px rgba(52,211,153,0.25)" : "0 3px 14px rgba(0,0,0,0.35)" }}
+        title={has ? `${demos.length} demo${demos.length === 1 ? "" : "s"} ready to show you` : "The office TV — off until the team has a demo"}
+        className={`absolute block ${has ? "cursor-pointer" : "cursor-default"}`}
+        style={style}
       >
-        <ProjectorScreen size={15} weight={has ? "fill" : "regular"} className={has ? "motion-safe-anim animate-pulse" : ""} />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">Demo</span>
-        {has && (
-          <span className="grid h-4 min-w-4 place-items-center rounded-full bg-emerald-300 px-1 text-[9px] font-bold text-black">
-            {demos.length}
-          </span>
-        )}
+        {/* on-air lamp above the bezel */}
+        <span
+          className={`absolute -top-2 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full ${has ? "motion-safe-anim animate-pulse" : ""}`}
+          style={{ background: has ? "#f87171" : "#252c42", boxShadow: has ? "0 0 6px #f87171" : "none" }}
+          aria-hidden
+        />
+        {/* the screen */}
+        <span
+          className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-[5px] border-2 transition-shadow duration-700"
+          style={{
+            background: has ? "linear-gradient(160deg, #0b2921 0%, #071912 60%, #05120d 100%)" : "linear-gradient(160deg, #0a0d17 0%, #070910 100%)",
+            borderColor: "#1c2338",
+            boxShadow: has ? "0 0 22px rgba(52,211,153,0.35), inset 0 0 18px rgba(52,211,153,0.12)" : "inset 0 1px 0 rgba(190,215,255,0.06)",
+          }}
+        >
+          {has ? (
+            <>
+              <span className="grid h-6 w-6 place-items-center rounded-full border border-emerald-300/60 bg-emerald-400/15 text-emerald-200">
+                <Play size={11} weight="fill" />
+              </span>
+              {demos.length > 1 && (
+                <span className="absolute right-1 top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-emerald-300 px-0.5 text-[8px] font-bold text-black">
+                  {demos.length}
+                </span>
+              )}
+              {/* title ticker along the bottom of the screen */}
+              <span className="absolute inset-x-0 bottom-0.5 overflow-hidden">
+                <span
+                  className="motion-safe-anim inline-block whitespace-nowrap text-[8px] font-medium tracking-wide text-emerald-100/85"
+                  style={{ animation: "tv-ticker 7s linear infinite" }}
+                >
+                  {demos[0]!.title}
+                </span>
+              </span>
+            </>
+          ) : (
+            <>
+              <ProjectorScreen size={13} className="text-[#20283e]" />
+              {/* standby LED */}
+              <span className="absolute bottom-1 right-1.5 h-1 w-1 rounded-full bg-[#2b3654]" aria-hidden />
+            </>
+          )}
+        </span>
+        {/* wall mount */}
+        <span className="absolute -bottom-1.5 left-1/2 h-1.5 w-5 -translate-x-1/2 rounded-b-sm bg-[#1c2338]" aria-hidden />
       </button>
 
       {open && <DemoModal team={team} demos={demos} onClose={() => setOpen(false)} />}

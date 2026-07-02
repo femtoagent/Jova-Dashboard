@@ -255,18 +255,33 @@ check(
   "flight clears after landing",
 );
 
-// demo board: glows with a demo, opens the modal, dismiss clears it
+// demo board: the TV turns on with a demo, opens the modal, dismiss clears OUR demo
 await store(() => window.__networkStore.getState().addDemo("forge", "Smoke demo", "A demo produced by the smoke test.", "https://example.com/demo"));
 await wait(300);
-check(await clickByTitle("1 demo ready"), "demo board clickable when a demo is ready");
+check(
+  await store(() => {
+    const tv = document.querySelector('[data-demo-board][data-on="true"]');
+    if (!tv) return false;
+    tv.click();
+    return true;
+  }),
+  "demo TV turns on and is clickable",
+);
 await wait(300);
 check(await store(() => !!document.querySelector("[data-demo-modal]") && document.body.textContent.includes("Smoke demo")), "demo modal opens with the demo");
 await clickByText("Dismiss");
 await wait(400);
 check(
-  await store(() => !document.querySelector("[data-demo-modal]") && window.__networkStore.getState().demos.length === 0),
-  "dismissing the demo clears the board",
+  await store(() => !window.__networkStore.getState().demos.some((d) => d.title === "Smoke demo")),
+  "dismissing the demo clears it",
 );
+// the live driver may have readied its own demo meanwhile — close the modal + clear forge's list
+await store(() => {
+  document.querySelector("[data-demo-modal] button[title='Close']")?.click();
+  const ns = window.__networkStore.getState();
+  for (const d of ns.demos.filter((x) => x.teamId === "forge")) ns.resolveDemo(d.id);
+});
+await wait(300);
 
 // character picker: choose a different crewmate through the real settings UI
 await store((id) => window.__settingsStore.getState().openAgent("forge", id), dev);
@@ -302,6 +317,49 @@ await store(() => document.querySelector('[data-team-room-toggle] input')?.click
 await store(() => window.__settingsStore.getState().closeSettings());
 await wait(400);
 check(await store(() => !!document.querySelector("[data-team-room]")), "toggle back on restores the office");
+
+// the glassboard zooms to a readable overlay
+check(await clickByTitle("Initiatives — tap to read the board"), "glassboard tappable");
+await wait(300);
+check(await store(() => !!document.querySelector("[data-initiative-overlay]")), "glassboard zooms to a readable overlay");
+await store(() => document.querySelector("[data-initiative-overlay] button[title='Close']")?.click());
+await wait(300);
+check(await store(() => !document.querySelector("[data-initiative-overlay]")), "board overlay closes");
+
+// the demo TV is OFF with nothing to show (the earlier demo was dismissed)
+check(await store(() => document.querySelector("[data-demo-board]")?.dataset.on === "false"), "demo TV is off when idle");
+
+// walking handoff: the sender slides toward the receiver before the toss
+const walkPair = await store(() => {
+  const t = window.__networkStore.getState().teams.find((x) => x.id === "forge");
+  const a = t.agents.find((x) => x.role === "developer") ?? t.agents[1];
+  const b = t.agents.find((x) => x.role === "qa") ?? t.agents[2];
+  window.__networkStore.getState().emitFlow({ teamId: "forge", fromAgentId: a.id, toAgentId: b.id, taskId: "walk-test", taskTitle: "Walk test", kind: "handoff" });
+  return a.id;
+});
+await wait(300);
+check(
+  await store((id) => document.querySelector(`[data-agent-desk][data-agent-id="${id}"]`)?.dataset.walking === "true", walkPair),
+  "handoff sender walks toward the receiver",
+);
+await wait(1500);
+check(
+  await store((id) => document.querySelector(`[data-agent-desk][data-agent-id="${id}"]`)?.dataset.walking === "false", walkPair),
+  "sender walks back after the toss",
+);
+
+// Nexus tosses work in from OUTSIDE the window
+await store((id) => {
+  window.__networkStore.getState().emitFlow({ teamId: "forge", fromAgentId: null, toAgentId: id, taskId: "nexus-toss", taskTitle: "Nexus toss", kind: "assign" });
+}, walkPair);
+await wait(280);
+check(await store(() => !!document.querySelector("[data-nexus-visitor]")), "Nexus orb appears at the window for its toss");
+await wait(2100);
+// assert OUR toss finished (the live driver may legitimately have Nexus visiting again already)
+check(
+  await store(() => !window.__networkStore.getState().flows.some((f) => f.taskId === "nexus-toss")),
+  "Nexus toss completes and clears",
+);
 
 // the back chip returns to the map
 check(await clickByTitle("Back to the network map"), "back chip clickable");
@@ -410,6 +468,53 @@ check(
   "mobile: team room fits the phone with desks laid out",
 );
 await page.screenshot({ path: "demo-mobile-team-room.png" });
+
+// big roster on a phone: the room goes pannable with a Fit toggle instead of shrinking forever
+await store(() => {
+  const ns = window.__networkStore.getState();
+  for (let i = 0; i < 5; i++) ns.addAgent("halo", "developer", `Crew ${i + 1}`);
+  ns.focusTeam("halo");
+});
+await wait(700);
+check(
+  await store(() => document.querySelector("[data-team-room]")?.dataset.pannable === "true" && !!document.querySelector("[data-room-fit]")),
+  "mobile: big roster makes the room pannable with a Fit toggle",
+);
+// drag the floor — the room pans (find a real patch of empty floor first; desks refuse to pan)
+const floorSpot = await store(() => {
+  const room = document.querySelector("[data-team-room]");
+  const r = room.getBoundingClientRect();
+  for (let y = r.top + 70; y < r.bottom - 24; y += 22) {
+    for (let x = r.left + 12; x < r.right - 12; x += 22) {
+      const el = document.elementFromPoint(x, y);
+      if (el && el.closest("[data-team-room]") && !el.closest("[data-agent-desk],button")) return { x, y };
+    }
+  }
+  return null;
+});
+check(!!floorSpot, "mobile: found empty floor to grab");
+const panBefore = await store(() => window.getComputedStyle(document.querySelector("[data-team-room] > div:last-child")).transform);
+if (floorSpot) {
+  await page.mouse.move(floorSpot.x, floorSpot.y);
+  await page.mouse.down();
+  await page.mouse.move(floorSpot.x - 70, floorSpot.y - 50, { steps: 6 });
+  await page.mouse.up();
+}
+await wait(300);
+const panAfter = await store(() => window.getComputedStyle(document.querySelector("[data-team-room] > div:last-child")).transform);
+check(panBefore !== panAfter, "mobile: dragging the floor pans the room");
+await store(() => document.querySelector("[data-room-fit]")?.click());
+await wait(400);
+check(
+  await store(() => {
+    const t = window.__networkStore.getState().teams.find((x) => x.id === "halo");
+    return document.querySelectorAll("[data-agent-desk]").length === t.agents.length;
+  }),
+  "mobile: Fit shows the whole big roster",
+);
+await page.screenshot({ path: "demo-mobile-team-room-big.png" });
+await store(() => window.__networkStore.getState().focusTeam("halo"));
+await wait(300);
 check(await clickByTitle("Back to the network map"), "mobile: back chip returns to the map");
 
 console.log("ERRORS:", errors.length ? "\n" + errors.join("\n") : "none");

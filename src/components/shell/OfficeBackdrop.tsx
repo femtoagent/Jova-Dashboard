@@ -2,11 +2,20 @@
 
 import type { OfficeTheme } from "@/lib/network/officeThemes";
 
+/** Where the window sits on the left wall — shared with the Nexus visitor + flight anchors. */
+export function windowRect(w: number, wallH: number) {
+  const winW = Math.min(w * 0.2, 190);
+  return { x: w * 0.07, y: wallH * 0.16, w: winW, h: wallH * 0.62 };
+}
+
 /**
  * The Team Room's decorated office, drawn to the measured box from theme params: corner-lit
- * walls, an iso-gridded floor, a window on the void (with starfield — Nexus's work flies in
- * through it), a shelf, a plant that sways, a hanging lamp, and a team-tinted rug. Swapping
- * the office later = another OfficeTheme entry.
+ * walls, an iso-gridded floor, a window on the void (with starfield — Nexus tosses work in
+ * from outside it), a plant that sways, a hanging lamp, and a team-tinted rug.
+ *
+ * The room LIGHTS with the team's activity: `busy` (0..1 = share of agents working) drives the
+ * lamp pool and window glow — a slammed office runs bright, an all-idle one dims to cozy night.
+ * `flareTick` flares the lamp for a beat (an initiative just shipped).
  */
 export function OfficeBackdrop({
   w,
@@ -14,22 +23,25 @@ export function OfficeBackdrop({
   wallH,
   theme,
   accent,
+  busy = 0,
+  flareTick = 0,
 }: {
   w: number;
   h: number;
   wallH: number;
   theme: OfficeTheme;
   accent: string;
+  busy?: number;
+  flareTick?: number;
 }) {
   const mid = w / 2;
-  // window on the left wall, shelf + plant on the right
-  const winW = Math.min(w * 0.2, 190);
-  const winH = wallH * 0.62;
-  const winX = w * 0.07;
-  const winY = wallH * 0.16;
+  const win = windowRect(w, wallH);
   const rugRx = Math.min(w * 0.34, 360);
   const rugRy = Math.min((h - wallH) * 0.4, 130);
   const rugCy = wallH + (h - wallH) * 0.58;
+  const lampX = w * 0.36;
+  const lampGlow = 0.55 + busy * 0.45; // idle office = dimmer pool
+  const winGlow = 0.6 + busy * 0.4;
 
   return (
     <svg data-office-backdrop width={w} height={h} className="absolute inset-0" aria-hidden>
@@ -48,7 +60,7 @@ export function OfficeBackdrop({
           <stop offset="100%" stopColor="#060a14" />
         </radialGradient>
         <radialGradient id="or-lamp" cx="0.5" cy="0" r="1">
-          <stop offset="0%" stopColor="rgba(200,225,255,0.14)" />
+          <stop offset="0%" stopColor="rgba(200,225,255,0.16)" />
           <stop offset="100%" stopColor="transparent" />
         </radialGradient>
         <radialGradient id="or-rug" cx="0.5" cy="0.5" r="0.5">
@@ -83,39 +95,47 @@ export function OfficeBackdrop({
       <ellipse cx={mid} cy={rugCy} rx={rugRx} ry={rugRy} fill="none" stroke={accent} strokeOpacity="0.14" strokeWidth="1.5" />
 
       {/* window on the void */}
-      <g>
-        <rect x={winX - 5} y={winY - 5} width={winW + 10} height={winH + 10} rx="10" fill="rgba(0,0,0,0.4)" />
-        <rect x={winX} y={winY} width={winW} height={winH} rx="6" fill="url(#or-win)" />
+      <g style={{ opacity: winGlow, transition: "opacity 1.2s ease" }}>
+        <rect x={win.x - 5} y={win.y - 5} width={win.w + 10} height={win.h + 10} rx="10" fill="rgba(0,0,0,0.4)" />
+        <rect x={win.x} y={win.y} width={win.w} height={win.h} rx="6" fill="url(#or-win)" />
         {/* stars */}
         {Array.from({ length: 14 }, (_, i) => {
-          const sx = winX + ((i * 37) % Math.max(winW - 10, 1)) + 5;
-          const sy = winY + ((i * 53) % Math.max(winH - 10, 1)) + 5;
+          const sx = win.x + ((i * 37) % Math.max(win.w - 10, 1)) + 5;
+          const sy = win.y + ((i * 53) % Math.max(win.h - 10, 1)) + 5;
           return <circle key={i} cx={sx} cy={sy} r={i % 3 === 0 ? 1.4 : 0.8} fill="#cfe8ff" opacity={0.35 + (i % 4) * 0.16} />;
         })}
-        {/* a far glimpse of Nexus */}
-        <circle cx={winX + winW * 0.68} cy={winY + winH * 0.7} r={5} fill="#9fe8ff" opacity="0.8" />
-        <circle cx={winX + winW * 0.68} cy={winY + winH * 0.7} r={11} fill="#9fe8ff" opacity="0.14" />
         {/* frame */}
-        <rect x={winX} y={winY} width={winW} height={winH} rx="6" fill="none" stroke={theme.trim} strokeWidth="2" />
-        <line x1={winX + winW / 2} y1={winY} x2={winX + winW / 2} y2={winY + winH} stroke={theme.trim} strokeWidth="1.5" />
-        <line x1={winX} y1={winY + winH / 2} x2={winX + winW} y2={winY + winH / 2} stroke={theme.trim} strokeWidth="1.5" />
+        <rect x={win.x} y={win.y} width={win.w} height={win.h} rx="6" fill="none" stroke={theme.trim} strokeWidth="2" />
+        <line x1={win.x + win.w / 2} y1={win.y} x2={win.x + win.w / 2} y2={win.y + win.h} stroke={theme.trim} strokeWidth="1.5" />
+        <line x1={win.x} y1={win.y + win.h / 2} x2={win.x + win.w} y2={win.y + win.h / 2} stroke={theme.trim} strokeWidth="1.5" />
       </g>
 
-      {/* shelf with a few books (one in team color) */}
+      {/* hanging lamp + light pool over the desks (brightness = how busy the room is) */}
       <g>
-        <rect x={w * 0.72} y={wallH * 0.34} width={Math.min(w * 0.16, 150)} height="4" rx="2" fill={theme.trim} />
-        <rect x={w * 0.72 + 8} y={wallH * 0.34 - 20} width="9" height="20" rx="1.5" fill="#3b4763" />
-        <rect x={w * 0.72 + 20} y={wallH * 0.34 - 24} width="9" height="24" rx="1.5" fill={accent} opacity="0.75" />
-        <rect x={w * 0.72 + 32} y={wallH * 0.34 - 17} width="9" height="17" rx="1.5" fill="#2c3550" />
-        <rect x={w * 0.72 + 44} y={wallH * 0.34 - 21} width="9" height="21" rx="1.5" fill="#4a5878" />
-      </g>
-
-      {/* hanging lamp + light pool over the desks */}
-      <g>
-        <line x1={mid} y1="0" x2={mid} y2={wallH * 0.3} stroke={theme.trim} strokeWidth="1.5" />
-        <path d={`M ${mid - 16} ${wallH * 0.3 + 12} Q ${mid} ${wallH * 0.3 - 10} ${mid + 16} ${wallH * 0.3 + 12} Z`} fill="#1c2338" stroke={theme.trim} strokeWidth="1" />
-        <circle cx={mid} cy={wallH * 0.3 + 9} r="3" fill="#ffe9b8" opacity="0.9" />
-        <ellipse cx={mid} cy={wallH * 0.9} rx={w * 0.2} ry={wallH * 0.55} fill="url(#or-lamp)" />
+        <line x1={lampX} y1="0" x2={lampX} y2={wallH * 0.3} stroke={theme.trim} strokeWidth="1.5" />
+        <path d={`M ${lampX - 16} ${wallH * 0.3 + 12} Q ${lampX} ${wallH * 0.3 - 10} ${lampX + 16} ${wallH * 0.3 + 12} Z`} fill="#1c2338" stroke={theme.trim} strokeWidth="1" />
+        <circle cx={lampX} cy={wallH * 0.3 + 9} r="3" fill="#ffe9b8" style={{ opacity: 0.4 + busy * 0.6, transition: "opacity 1.2s ease" }} />
+        <ellipse
+          cx={lampX}
+          cy={wallH * 0.95}
+          rx={w * 0.2}
+          ry={wallH * 0.6}
+          fill="url(#or-lamp)"
+          style={{ opacity: lampGlow, transition: "opacity 1.2s ease" }}
+        />
+        {/* an initiative just shipped — the lamp flares for a beat */}
+        {flareTick > 0 && (
+          <ellipse
+            key={flareTick}
+            className="motion-safe-anim"
+            cx={lampX}
+            cy={wallH * 0.95}
+            rx={w * 0.26}
+            ry={wallH * 0.75}
+            fill="url(#or-lamp)"
+            style={{ animation: "fade 900ms ease-out reverse forwards" }}
+          />
+        )}
       </g>
 
       {/* plant (sways gently; stilled under reduced motion) */}

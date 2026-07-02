@@ -13,13 +13,29 @@ export interface Anchor {
 
 const FLIGHT_MS = 950;
 const LAND_MS = 340;
+/** on a handoff the SENDER walks this share of the way (capped), then tosses the doc the rest */
+export const WALK_FRACTION = 0.45;
+export const WALK_MAX_PX = 150;
+export const WALK_MS = 650;
+/** how long the Nexus orb winds up outside the window before the toss */
+export const NEXUS_WINDUP_MS = 550;
+
+/** The sender's walk vector for a handoff (shared with TeamRoom, which slides the crewmate). */
+export function walkVector(from: Anchor, to: Anchor): Anchor {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const walk = Math.min(len * WALK_FRACTION, WALK_MAX_PX);
+  return { x: (dx / len) * walk, y: (dy / len) * walk };
+}
 
 /**
- * The flying documents: every FlowEvent for this team becomes a packet that arcs from the
- * sender's desk (or in through the window, when Nexus spawned the work) to the receiver's.
- * Provenance is readable at every moment: the packet is tinted the SENDER's accent, stamped
- * with the sender's glyph, trails a comet in the sender's color, and carries a "from X" tag —
- * and the sheet it becomes on the target's pile keeps that same color (see AgentDesk).
+ * The flying documents. Assigns toss straight from the PM's desk; handoffs launch AFTER the
+ * sender has walked partway over (TeamRoom slides the crewmate on the same clock); Nexus-spawned
+ * work is tossed in through the window by a Nexus orb that rises OUTSIDE the glass (see
+ * NexusVisitors, rendered by TeamRoom below the desks so it reads as beyond the window).
+ * Provenance is readable at every moment: sender-tinted, sender-stamped, comet trail, "from X"
+ * tag — and the landed pile sheet keeps the color (see AgentDesk).
  */
 export function HandoffLayer({
   team,
@@ -56,14 +72,19 @@ function Packet({
   const trailA = useRef<HTMLDivElement>(null);
   const trailB = useRef<HTMLDivElement>(null);
   const [landing, setLanding] = useState(false);
+  const [airborne, setAirborne] = useState(false);
 
   const sender = flow.fromAgentId ? team.agents.find((a) => a.id === flow.fromAgentId) : undefined;
   const accent = flow.fromAgentId === null ? NEXUS_SENDER.accent : sender ? characterFor(sender).accent : team.color;
   const fromName = flow.fromAgentId === null ? NEXUS_SENDER.name : sender?.label ?? "?";
   const Glyph = flow.fromAgentId === null ? NexusGlyph : sender ? roleIcon(sender.role) : NexusGlyph;
 
-  const from = flow.fromAgentId === null ? nexusAnchor : anchors[flow.fromAgentId ?? ""];
+  const senderAnchor = flow.fromAgentId === null ? nexusAnchor : anchors[flow.fromAgentId ?? ""];
   const to = anchors[flow.toAgentId];
+  const isHandoff = flow.kind === "handoff" && !!sender;
+  // handoffs launch from where the walking sender STOPS; others from the sender's desk / window
+  const from = isHandoff && senderAnchor && to ? add(senderAnchor, walkVector(senderAnchor, to)) : senderAnchor;
+  const delay = isHandoff ? WALK_MS + 80 : flow.fromAgentId === null ? NEXUS_WINDUP_MS : 0;
 
   useEffect(() => {
     const clear = () => useNetworkStore.getState().clearFlow(flow.id);
@@ -74,10 +95,11 @@ function Packet({
       return;
     }
     const ctrl = { x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - 72 };
-    const start = performance.now();
     const hist: Anchor[] = [];
     let raf = 0;
+    let start = 0;
     const tick = (now: number) => {
+      if (!start) start = now;
       const p = Math.min((now - start) / FLIGHT_MS, 1);
       const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOutQuad
       const inv = 1 - e;
@@ -96,8 +118,14 @@ function Packet({
         window.setTimeout(clear, LAND_MS);
       }
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const timer = window.setTimeout(() => {
+      setAirborne(true);
+      raf = requestAnimationFrame(tick);
+    }, delay);
+    return () => {
+      window.clearTimeout(timer);
+      cancelAnimationFrame(raf);
+    };
     // one flight per packet — endpoints are captured at launch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -118,6 +146,7 @@ function Packet({
       />
     );
   }
+  if (!airborne) return null; // waiting for the walk / the Nexus wind-up
 
   return (
     <>
@@ -144,6 +173,41 @@ function Packet({
       </div>
     </>
   );
+}
+
+/**
+ * Nexus at the window: while a Nexus-spawned flow is live, a small orb rises OUTSIDE the glass
+ * (TeamRoom renders this layer BELOW the desks, over the backdrop, so it reads as beyond the
+ * window), winds up with a bob, glows on the toss, then sinks back into the void.
+ */
+export function NexusVisitors({ team, nexusAnchor }: { team: Team; nexusAnchor: Anchor }) {
+  const flows = useNetworkStore((s) => s.flows);
+  const visiting = flows.some((f) => f.teamId === team.id && f.fromAgentId === null);
+  return (
+    <div className="pointer-events-none absolute inset-0" style={{ zIndex: 5 }} aria-hidden>
+      {visiting && (
+        <div
+          data-nexus-visitor
+          className="absolute animate-[fadein_300ms_ease]"
+          style={{ left: nexusAnchor.x, top: nexusAnchor.y, transform: "translate(-50%, -50%)" }}
+        >
+          <span
+            className="motion-safe-anim relative block h-7 w-7 rounded-full"
+            style={{
+              background: "radial-gradient(circle at 36% 32%, #e6fbff 0%, #9fe8ff 48%, rgba(95,208,255,0.5) 78%, transparent 100%)",
+              boxShadow: "0 0 16px rgba(159,232,255,0.8), 0 0 40px rgba(159,232,255,0.35)",
+              opacity: 0.85, // a touch dimmed — she's behind the glass
+              animation: "presence-breathe 0.9s ease-in-out infinite",
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function add(a: Anchor, b: Anchor): Anchor {
+  return { x: a.x + b.x, y: a.y + b.y };
 }
 
 /** A dark, readable version of the accent for the glyph on the light paper. */

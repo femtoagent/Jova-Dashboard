@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { AgentNode, AgentTask, Team } from "@/lib/network/types";
+import { useNetworkStore } from "@/lib/network/useNetworkStore";
+import type { AgentNode, AgentTask, FlowEvent, Team } from "@/lib/network/types";
 import { characterFor, NEXUS_SENDER } from "@/lib/agents/roomCharacters";
 import { roleIcon } from "@/lib/agents/roleGlyphs";
+import { Wrench } from "@phosphor-icons/react";
 import { AgentActor } from "./AgentActor";
 
 /** Design-space size of one desk unit; TeamRoom scales the whole unit. */
@@ -11,10 +13,12 @@ export const DESK_W = 200;
 export const DESK_H = 200;
 
 /**
- * One workstation in the Team Room: the desk, its crewmate (idle = reclined + slow sway +
- * the occasional "z"; active = leaning in, lit visor, rising work motes), the provenance-
- * stamped paper pile (sheets pop in as tasks start, thicken as steps advance, fly off on
- * completion), selection ring, and label. Click selects the agent (detail in the sidebar).
+ * One workstation in the Team Room: the desk, its crewmate (idle = reclined + a role-flavored
+ * relaxing beat, or a generic one for custom roles; active = leaning in, lit visor, work motes),
+ * the provenance-stamped paper pile (sheets pop in as tasks start — synced to land WITH the
+ * flying document — thicken as steps advance, fly off with a hop + confetti on completion),
+ * speech bubbles, selection ring, and label. `walkX/walkY` slide the crewmate toward a teammate
+ * during a handoff; `celebrateTick` makes everyone hop when an initiative ships.
  */
 export function AgentDesk({
   team,
@@ -25,6 +29,9 @@ export function AgentDesk({
   z,
   selected,
   talking,
+  walkX = 0,
+  walkY = 0,
+  celebrateTick = 0,
   onSelect,
 }: {
   team: Team;
@@ -35,12 +42,18 @@ export function AgentDesk({
   z: number;
   selected: boolean;
   talking: boolean;
+  walkX?: number;
+  walkY?: number;
+  celebrateTick?: number;
   onSelect: () => void;
 }) {
   const c = characterFor(agent);
   const active = agent.tasks.length > 0;
   const Glyph = roleIcon(agent.role);
-  const ghosts = useGhostSheets(agent.tasks);
+  const flows = useNetworkStore((s) => s.flows);
+  const { ghosts, hopTick } = useGhostSheets(agent.tasks);
+  const [bang, setBang] = useState(false); // the "!" when handed work lands
+  const walking = walkX !== 0 || walkY !== 0;
 
   // provenance for a sheet: sender's character accent (or Nexus), owner's accent as fallback
   const sheetIdentity = (t: AgentTask) => {
@@ -50,11 +63,20 @@ export function AgentDesk({
     return { color: c.accent, from: agent.label };
   };
 
+  const onLanded = () => {
+    setBang(true);
+    window.setTimeout(() => setBang(false), 1400);
+  };
+
+  const idle = !active ? idleBeatFor(agent, c.accent) : null;
+  const hopKey = hopTick + celebrateTick * 1000;
+
   return (
     <button
       data-agent-desk
       data-agent-id={agent.id}
       data-active={active ? "true" : "false"}
+      data-walking={walking ? "true" : "false"}
       onClick={(e) => {
         e.stopPropagation();
         onSelect();
@@ -90,16 +112,57 @@ export function AgentDesk({
         )}
       </svg>
 
-      {/* the crewmate — outer div = lean pose, inner = bob loop (compose, don't fight) */}
-      <div className="absolute" style={{ left: 68, top: 38, width: 64, height: 80 }}>
-        <div
-          className="motion-safe-anim"
-          style={{ animation: `actor-bob ${active ? "1.7s" : "4.2s"} ease-in-out infinite`, opacity: active ? 1 : 0.82 }}
-        >
-          <AgentActor character={c} active={active} width={64} />
+      {/* the crewmate — walk slide (outer), one-shot hop (keyed), bob loop, then the body */}
+      <div
+        className="absolute"
+        style={{
+          left: 68,
+          top: 38,
+          width: 64,
+          height: 80,
+          transform: walking ? `translate(${walkX / scale}px, ${walkY / scale}px)` : "translate(0, 0)",
+          transition: "transform 650ms cubic-bezier(0.45, 0, 0.35, 1)",
+          zIndex: 2,
+        }}
+      >
+        <div key={hopKey} className="motion-safe-anim" style={hopKey > 0 ? { animation: "actor-hop 550ms ease-out" } : undefined}>
+          <div
+            className="motion-safe-anim"
+            style={{
+              animation: `actor-bob ${walking ? "0.45s" : active ? "1.7s" : "4.2s"} ease-in-out infinite${
+                idle?.wrapperAnim ? `, ${idle.wrapperAnim}` : ""
+              }`,
+              opacity: active ? 1 : 0.85,
+            }}
+          >
+            <AgentActor character={c} active={active || walking} width={64} />
+          </div>
         </div>
-        {/* idle: the occasional drifting "z" */}
-        {!active && (
+
+        {/* speech bubbles */}
+        {talking && (
+          <span className="absolute -right-7 -top-4 flex items-center gap-[3px] rounded-lg rounded-bl-none border border-line bg-panel px-1.5 py-1" aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="motion-safe-anim h-1 w-1 rounded-full bg-mist"
+                style={{ animation: `typing-bounce 1.2s ease-in-out ${i * 0.15}s infinite` }}
+              />
+            ))}
+          </span>
+        )}
+        {bang && (
+          <span
+            className="absolute -right-4 -top-4 grid h-5 w-5 place-items-center rounded-full rounded-bl-none border border-amber-300/60 bg-amber-400/20 text-[11px] font-bold text-amber-200 animate-[radial-pop_240ms_ease-out]"
+            style={{ transform: "translate(50%, -50%)" }}
+            aria-hidden
+          >
+            !
+          </span>
+        )}
+
+        {/* idle: the occasional drifting "z" (every idler dozes now and then, whatever their beat) */}
+        {!active && !walking && (
           <span
             className="motion-safe-anim absolute -right-2 top-0 select-none text-[13px] font-semibold"
             style={{ color: c.accent, animation: "zz-drift 5.5s ease-in-out infinite", opacity: 0 }}
@@ -108,19 +171,21 @@ export function AgentDesk({
             z
           </span>
         )}
+        {/* idle: role-flavored (or generic) relaxing beat */}
+        {!walking && idle?.deco}
       </div>
 
       {/* role badge on the chest */}
       <span
         className="absolute grid h-[17px] w-[17px] place-items-center rounded-full border"
-        style={{ left: 91, top: 79, background: "#0d1018", borderColor: c.accent, color: c.accent }}
+        style={{ left: 91, top: 79, background: "#0d1018", borderColor: c.accent, color: c.accent, zIndex: 2 }}
         aria-hidden
       >
         <Glyph size={10} weight="bold" />
       </span>
 
       {/* the desk (in front of the crewmate) */}
-      <svg width={DESK_W} height={DESK_H} className="pointer-events-none absolute inset-0 overflow-visible" aria-hidden>
+      <svg width={DESK_W} height={DESK_H} className="pointer-events-none absolute inset-0 overflow-visible" style={{ zIndex: 3 }} aria-hidden>
         {/* top */}
         <path
           d="M 25 132 L 100 110 L 175 132 L 100 154 Z"
@@ -147,49 +212,60 @@ export function AgentDesk({
         )}
       </svg>
 
-      {/* work pile — sheets keyed by task id (mount = drop-in); ghosts fly off */}
-      <div className="absolute" style={{ left: 118, top: 84, width: 44, height: 44 }} data-pile-count={agent.tasks.length}>
+      {/* work pile — sheets keyed by task id (mount = drop-in, delayed to land WITH the flight) */}
+      <div className="absolute" style={{ left: 118, top: 84, width: 44, height: 44, zIndex: 4 }} data-pile-count={agent.tasks.length}>
         {agent.tasks.map((t, i) => {
           const id = sheetIdentity(t);
-          const height = 4 + t.steps * 1.6;
           const below = agent.tasks.slice(0, i).reduce((s, x) => s + 4 + x.steps * 1.6 + 2, 0);
           return (
-            <div
+            <Sheet
               key={t.id}
-              data-sheet
-              data-task-id={t.id}
-              title={`“${t.title}” — from ${id.from} · ${t.steps}/6 steps`}
-              className="absolute left-0 w-[38px] animate-[sheet-drop_450ms_ease-out]"
-              style={{
-                bottom: below,
-                height,
-                background: id.color,
-                opacity: 0.92,
-                border: "1px solid rgba(0,0,0,0.45)",
-                borderRadius: 2,
-                transform: "skewX(-24deg)",
-                transition: "height 300ms ease, bottom 300ms ease",
-                boxShadow: `0 0 8px ${id.color}55`,
-              }}
+              task={t}
+              color={id.color}
+              from={id.from}
+              bottom={below}
+              flight={flows.find((f) => f.taskId === t.id)}
+              onLanded={onLanded}
             />
           );
         })}
         {ghosts.map((g) => {
           const id = sheetIdentity(g.task);
           return (
-            <div
-              key={g.key}
-              className="absolute left-0 w-[38px] animate-[sheet-fly_650ms_ease-in_forwards]"
-              style={{
-                bottom: 8,
-                height: 4 + g.task.steps * 1.6,
-                background: id.color,
-                border: "1px solid rgba(0,0,0,0.45)",
-                borderRadius: 2,
-                transform: "skewX(-24deg)",
-              }}
-              aria-hidden
-            />
+            <div key={g.key} aria-hidden>
+              <div
+                className="motion-safe-anim absolute left-0 w-[38px] animate-[sheet-fly_650ms_ease-in_forwards]"
+                style={{
+                  bottom: 8,
+                  height: 4 + g.task.steps * 1.6,
+                  background: id.color,
+                  border: "1px solid rgba(0,0,0,0.45)",
+                  borderRadius: 2,
+                  transform: "skewX(-24deg)",
+                }}
+              />
+              {/* confetti! */}
+              {Array.from({ length: 6 }, (_, i) => {
+                const ang = (i / 6) * Math.PI * 2;
+                return (
+                  <span
+                    key={i}
+                    className="motion-safe-anim absolute h-1.5 w-1 rounded-[1px]"
+                    style={
+                      {
+                        left: 14,
+                        bottom: 14,
+                        background: i % 3 === 0 ? team.color : i % 3 === 1 ? c.accent : "#f4f7ff",
+                        "--dx": `${Math.cos(ang) * (18 + (i % 2) * 12)}px`,
+                        "--dy": `${-24 - Math.abs(Math.sin(ang)) * 22}px`,
+                        animation: `confetti-burst 650ms ease-out ${i * 30}ms forwards`,
+                        opacity: 0,
+                      } as React.CSSProperties
+                    }
+                  />
+                );
+              })}
+            </div>
           );
         })}
       </div>
@@ -199,12 +275,12 @@ export function AgentDesk({
         <>
           <span
             className="motion-safe-anim absolute h-1.5 w-1.5 rounded-full"
-            style={{ left: 88, top: 96, background: team.color, animation: "mote-rise 2.4s ease-out infinite", opacity: 0 }}
+            style={{ left: 88, top: 96, background: team.color, animation: "mote-rise 2.4s ease-out infinite", opacity: 0, zIndex: 4 }}
             aria-hidden
           />
           <span
             className="motion-safe-anim absolute h-1 w-1 rounded-full"
-            style={{ left: 112, top: 100, background: c.accent, animation: "mote-rise 2.4s ease-out 1.1s infinite", opacity: 0 }}
+            style={{ left: 112, top: 100, background: c.accent, animation: "mote-rise 2.4s ease-out 1.1s infinite", opacity: 0, zIndex: 4 }}
             aria-hidden
           />
         </>
@@ -223,9 +299,63 @@ export function AgentDesk({
   );
 }
 
-/** Sheets for just-completed tasks linger briefly to play the fly-off animation. */
+/**
+ * One pile sheet. If its task arrived on a flight (a matching FlowEvent existed at mount), the
+ * drop-in is DELAYED so the sheet lands together with the flying document — the delay is
+ * captured once at mount so the later flow-clear can't restart the animation.
+ */
+function Sheet({
+  task,
+  color,
+  from,
+  bottom,
+  flight,
+  onLanded,
+}: {
+  task: AgentTask;
+  color: string;
+  from: string;
+  bottom: number;
+  flight: FlowEvent | undefined;
+  onLanded: () => void;
+}) {
+  const [delayMs] = useState(() =>
+    flight ? (flight.kind === "handoff" ? 1600 : flight.fromAgentId === null ? 1450 : 950) : 0
+  );
+  useEffect(() => {
+    if (!delayMs) return;
+    const t = window.setTimeout(onLanded, delayMs + 100);
+    return () => window.clearTimeout(t);
+    // fire once for this sheet's arrival
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div
+      data-sheet
+      data-task-id={task.id}
+      title={`“${task.title}” — from ${from} · ${task.steps}/6 steps`}
+      className="motion-safe-anim absolute left-0 w-[38px]"
+      style={{
+        bottom,
+        height: 4 + task.steps * 1.6,
+        background: color,
+        opacity: 0.92,
+        border: "1px solid rgba(0,0,0,0.45)",
+        borderRadius: 2,
+        transform: "skewX(-24deg)",
+        transition: "height 300ms ease, bottom 300ms ease",
+        boxShadow: `0 0 8px ${color}55`,
+        animation: `sheet-drop 450ms ease-out ${delayMs}ms backwards`,
+      }}
+    />
+  );
+}
+
+/** Sheets for just-completed tasks linger briefly (fly-off + confetti); each batch bumps hopTick. */
 function useGhostSheets(tasks: AgentTask[]) {
   const [ghosts, setGhosts] = useState<{ key: string; task: AgentTask }[]>([]);
+  const [hopTick, setHopTick] = useState(0);
   const prev = useRef<AgentTask[]>(tasks);
   useEffect(() => {
     const cur = new Set(tasks.map((t) => t.id));
@@ -234,8 +364,119 @@ function useGhostSheets(tasks: AgentTask[]) {
     if (!removed.length) return;
     const keys = removed.map((t) => `${t.id}-ghost`);
     setGhosts((g) => [...g, ...removed.map((t) => ({ key: `${t.id}-ghost`, task: t }))]);
-    const timer = window.setTimeout(() => setGhosts((g) => g.filter((x) => !keys.includes(x.key))), 700);
+    setHopTick((n) => n + 1);
+    const timer = window.setTimeout(() => setGhosts((g) => g.filter((x) => !keys.includes(x.key))), 800);
     return () => window.clearTimeout(timer);
   }, [tasks]);
-  return ghosts;
+  return { ghosts, hopTick };
+}
+
+/** A relaxing beat: role-flavored when we know the role, else a generic one picked per agent. */
+function idleBeatFor(agent: AgentNode, accent: string): { deco?: React.ReactNode; wrapperAnim?: string } {
+  switch (agent.role) {
+    case "qa":
+      return {
+        deco: (
+          <span aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="motion-safe-anim absolute h-1.5 w-1.5 rounded-full"
+                style={{ left: -6 + i * 9, top: 26, background: accent, animation: `bug-juggle 1.9s ease-in-out ${i * 0.63}s infinite` }}
+              />
+            ))}
+          </span>
+        ),
+      };
+    case "marketing":
+      return {
+        deco: (
+          <span
+            aria-hidden
+            className="motion-safe-anim absolute"
+            style={{
+              left: 52,
+              top: 18,
+              width: 0,
+              height: 0,
+              borderLeft: `9px solid ${accent}`,
+              borderTop: "3px solid transparent",
+              borderBottom: "3px solid transparent",
+              animation: "plane-glide 8s ease-in-out infinite",
+              opacity: 0,
+            }}
+          />
+        ),
+      };
+    case "developer":
+      return {
+        deco: (
+          <span
+            aria-hidden
+            className="motion-safe-anim absolute select-none font-mono text-[11px] font-bold"
+            style={{ left: -14, top: 14, color: accent, animation: "brace-float 3.4s ease-in-out infinite" }}
+          >
+            {"{ }"}
+          </span>
+        ),
+      };
+    case "cx":
+      return {
+        deco: (
+          <span
+            aria-hidden
+            className="motion-safe-anim absolute rounded-full rounded-bl-none border"
+            style={{
+              left: 50,
+              top: 8,
+              width: 13,
+              height: 10,
+              borderColor: accent,
+              background: `${accent}22`,
+              animation: "cx-bubble 6s ease-in-out infinite",
+              opacity: 0,
+            }}
+          />
+        ),
+      };
+    case "devops":
+      return {
+        deco: (
+          <span
+            aria-hidden
+            className="motion-safe-anim absolute"
+            style={{ left: -13, top: 30, color: accent, animation: "wrench-turn 3.2s ease-in-out infinite", transformOrigin: "70% 70%" }}
+          >
+            <Wrench size={12} weight="fill" />
+          </span>
+        ),
+      };
+    case "pm":
+      return {
+        deco: (
+          <span aria-hidden>
+            {[0, 1].map((i) => (
+              <span
+                key={i}
+                className="motion-safe-anim absolute h-2 w-[2px] rounded-full"
+                style={{
+                  left: 63 + i * 4,
+                  top: 76,
+                  background: "rgba(200,225,255,0.5)",
+                  animation: `steam-rise 2.6s ease-out ${i * 1.1}s infinite`,
+                  opacity: 0,
+                }}
+              />
+            ))}
+          </span>
+        ),
+      };
+    default: {
+      // GENERIC pool — agents created with custom roles still relax, deterministically per agent
+      const pick = ["idle-stretch 7s ease-in-out infinite", "idle-sway 5s ease-in-out infinite", "idle-glance 8s ease-in-out infinite"][
+        agent.seed % 3
+      ];
+      return { wrapperAnim: pick };
+    }
+  }
 }

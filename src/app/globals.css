@@ -257,6 +257,200 @@ select:focus-visible,
   }
 }
 
+/* a crewmate's celebration hop (one-shot, with a little squash on landing) */
+@keyframes actor-hop {
+  0% {
+    transform: translateY(0) scaleY(1);
+  }
+  35% {
+    transform: translateY(-13px) scaleY(1.05);
+  }
+  70% {
+    transform: translateY(0) scaleY(0.92);
+  }
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+/* one confetti fleck — direction comes from --dx/--dy set inline */
+@keyframes confetti-burst {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx, 0px), var(--dy, -30px)) rotate(200deg) scale(0.6);
+  }
+}
+
+/* the marker stroke crossing out a finished initiative */
+@keyframes strike-line {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* a struck initiative losing its stick and falling off the board (run delayed, forwards) */
+@keyframes initiative-fall {
+  0% {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(16px) rotate(5deg);
+  }
+}
+
+/* the demo TV's title ticker */
+@keyframes tv-ticker {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+/* ---- idle beats (role-flavored + generic pool) ---- */
+
+/* QA's juggled bug motes (per-mote delays inline) */
+@keyframes bug-juggle {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(5px, -13px);
+    opacity: 1;
+  }
+}
+
+/* marketing's paper plane — dormant most of the cycle, then a glide across the desk */
+@keyframes plane-glide {
+  0%,
+  62% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(8deg);
+  }
+  66% {
+    opacity: 0.95;
+  }
+  92%,
+  100% {
+    opacity: 0;
+    transform: translate(86px, -20px) rotate(-6deg);
+  }
+}
+
+/* dev's floating braces */
+@keyframes brace-float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(-6px);
+    opacity: 0.8;
+  }
+}
+
+/* CX's chat bubble: inflates, holds, pops */
+@keyframes cx-bubble {
+  0%,
+  55% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  65% {
+    opacity: 0.9;
+    transform: scale(0.85);
+  }
+  86% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  93% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* PM's mug steam */
+@keyframes steam-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scaleX(1);
+  }
+  30% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-11px) scaleX(1.4);
+  }
+}
+
+/* devops idly turning a wrench */
+@keyframes wrench-turn {
+  0%,
+  20%,
+  100% {
+    transform: rotate(-18deg);
+  }
+  50%,
+  70% {
+    transform: rotate(22deg);
+  }
+}
+
+/* generic idles — for custom roles with no flavored beat */
+@keyframes idle-stretch {
+  0%,
+  70%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  78%,
+  88% {
+    transform: rotate(-4deg) translateY(-3px);
+  }
+}
+@keyframes idle-sway {
+  0%,
+  100% {
+    transform: rotate(-2.5deg);
+  }
+  50% {
+    transform: rotate(2.5deg);
+  }
+}
+@keyframes idle-glance {
+  0%,
+  55%,
+  100% {
+    transform: translateX(0);
+  }
+  62%,
+  72% {
+    transform: translateX(4px);
+  }
+  80%,
+  90% {
+    transform: translateX(-4px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion-safe-anim,
   .motion-safe-anim::before,
@@ -283,5 +477,6 @@ select:focus-visible,
 input[type="range"] {
   height: 4px;
 }
+
 
 
