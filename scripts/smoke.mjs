@@ -72,14 +72,17 @@ await wait(800);
 check(await store(() => !document.querySelector("canvas")), "shell boots without a <canvas> (no Three.js)");
 check(await store(() => !!document.querySelector('[data-jova-presence="hero"]')), "boots to the stage — Jova hero mounted");
 check(await store(() => window.__jovaStore.getState().viewMode === "default"), "viewMode is 'default'");
+check(await store(() => ![...document.querySelectorAll("button")].some((b) => b.textContent.includes("Demo"))), "demo panel removed");
 
-check(await clickByText("Demo"), "demo chip found (dev panel starts collapsed)");
-await wait(300);
-check(await clickByText("Speak"), "Speak button found");
-await wait(800);
-check(await store(() => window.__jovaStore.getState().wispState === "speaking"), "Speak drives wispState to 'speaking'");
+// drive speaking via the store (the Speak demo button is gone) and confirm the stage animates
+await store(() => {
+  window.__jovaStore.getState().setWispState("speaking");
+});
+await wait(500);
+check(await store(() => window.__jovaStore.getState().wispState === "speaking"), "wispState drives to 'speaking' on the stage");
 await page.screenshot({ path: "demo-stage-speaking.png" });
-await wait(3200);
+await store(() => window.__jovaStore.getState().setWispState("present"));
+await wait(300);
 
 // stage -> conversation -> stage (real clicks)
 check(await clickByTitle("Open the conversation"), "conversation button clickable");
@@ -177,10 +180,33 @@ check(
   "mobile: conversation fits the viewport",
 );
 await page.screenshot({ path: "demo-mobile-conversation.png" });
+await store(() => window.__jovaStore.getState().setChatOpen(false));
 await page.click('button[aria-label="Network"]');
 await wait(700);
 check(await store(() => !!document.querySelector("[data-network-map]")), "mobile: network view opens");
-await page.screenshot({ path: "demo-mobile-network.png" });
+
+// mobile: tapping a team expands the sheet to its detail; the collapse bar shows net + agents
+await store(() => window.__networkStore.getState().focusTeam("forge"));
+await wait(500);
+const teamBarText = await store(() => {
+  const bar = [...document.querySelectorAll('[data-network-sidebar] button[aria-expanded]')][0];
+  return bar ? bar.textContent : "";
+});
+check(await store(() => !!document.querySelector("[data-team-detail]")), "mobile: tapping a team shows its detail");
+check(/\$/.test(teamBarText) && /working/.test(teamBarText), "mobile: summary bar shows net + agents working");
+await page.screenshot({ path: "demo-mobile-team-expanded.png" });
+// collapse it — detail hides, summary bar stays
+await store(() => [...document.querySelectorAll('[data-network-sidebar] button[aria-expanded="true"]')][0]?.click());
+await wait(500);
+check(
+  await store(() => {
+    const body = document.querySelector("[data-team-detail]")?.closest("div.flex.min-h-0.flex-col");
+    if (!body) return false;
+    return body.getBoundingClientRect().height < 8; // collapsed
+  }),
+  "mobile: sheet collapses to the summary bar",
+);
+await page.screenshot({ path: "demo-mobile-team-collapsed.png" });
 
 console.log("ERRORS:", errors.length ? "\n" + errors.join("\n") : "none");
 await browser.close();

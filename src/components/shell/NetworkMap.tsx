@@ -169,7 +169,11 @@ function NexusNode({ box }: { box: Box }) {
           }}
         />
       </button>
-      <div className="pointer-events-none mt-1 text-center text-[11px] font-medium tracking-wide text-cyan-100/85">Nexus</div>
+      {/* label is absolute (top-full) so it doesn't inflate the wrapper — the orb stays centered on
+          the point where the strands terminate */}
+      <div className="pointer-events-none absolute left-1/2 top-full -translate-x-1/2 whitespace-nowrap text-center text-[11px] font-medium tracking-wide text-cyan-100/85">
+        Nexus
+      </div>
     </div>
   );
 }
@@ -260,7 +264,9 @@ function TeamDot({ team, box, focused, dimmed }: { team: Team; box: Box; focused
           </span>
         )}
       </button>
-      <div className="pointer-events-none mt-0.5 text-center">
+      {/* label is absolute (top-full) so the wrapper's height is just the orb — that keeps the orb
+          centered exactly on (p.x, p.y), where each strand terminates */}
+      <div className="pointer-events-none absolute left-1/2 top-full mt-0.5 -translate-x-1/2 whitespace-nowrap text-center">
         <div className="text-[12px] font-medium" style={{ color: team.color }}>
           {team.name}
         </div>

@@ -8,7 +8,6 @@ import { NetworkView } from "./NetworkView";
 import { SettingsPanel } from "@/components/settings/SettingsOverlay";
 import { DocPanel } from "@/components/docs/DocPanel";
 import { VoiceLayer } from "@/components/voice/VoiceLayer";
-import { DemoControls } from "@/components/demo/DemoControls";
 import { Graph, GearSix, Cube } from "@phosphor-icons/react";
 
 /**
@@ -35,10 +34,9 @@ export function AppShell() {
         )}
       </div>
 
-      {/* renderer-agnostic chrome: voice triggers (stage captions replace its feedback), docs, demo */}
+      {/* renderer-agnostic chrome: voice triggers (stage captions replace its feedback) + docs */}
       <VoiceLayer feedback={false} />
       <DocPanel />
-      <DemoControls />
     </div>
   );
 }

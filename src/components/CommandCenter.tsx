@@ -6,7 +6,6 @@ import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useConversation } from "@/lib/conversation/useConversation";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { ChatSurface } from "@/components/chat/ChatSurface";
-import { DemoControls } from "@/components/demo/DemoControls";
 import { TeamInfoPanel } from "@/components/network/TeamInfoPanel";
 import { NexusInfoPanel } from "@/components/network/NexusInfoPanel";
 import { DreamerPane } from "@/components/network/DreamerPane";
@@ -23,6 +22,8 @@ import { useAgentVoices } from "@/lib/settings/useAgentVoices";
 import { useLogStore } from "@/lib/logs/useLogStore";
 import { useActivityDriver } from "@/lib/network/useActivityDriver";
 import { setOnVoiceUnavailable } from "@/lib/audio/tts";
+
+// (DemoControls removed — the affect/Speak/Sound demo panel is gone from both renderers.)
 
 // The 3D world is client-only AND opt-in: this dynamic import only evaluates when the 3D view
 // is actually rendered, so the Default view never downloads Three.js at all.
@@ -108,7 +109,6 @@ function ClassicWorld({ fullMode }: { fullMode: boolean }) {
         <WorldToggle />
         <ViewToggle />
       </div>
-      <DemoControls />
       {fullMode && <NexusInfoPanel />}
       {fullMode && <DreamerPane />}
       {fullMode && <TeamInfoPanel />}

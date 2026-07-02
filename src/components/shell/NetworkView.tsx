@@ -1,22 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
 import { useJovaStore } from "@/lib/state/useJovaStore";
-import { rollup, net as netOf } from "@/lib/network/ledger";
+import { rollup, scaleMetrics, net as netOf } from "@/lib/network/ledger";
 import { NexusOverviewBody } from "@/components/network/NexusInfoPanel";
 import { TeamView, AgentDetail } from "@/components/network/TeamInfoPanel";
 import { DreamsFeed } from "@/components/network/DreamerPane";
 import { NetworkMap } from "./NetworkMap";
 import { ConversationPane } from "./ConversationPane";
 import { StageAudio } from "@/components/stage/StageAudio";
-import { Cloud, SpeakerHigh, SpeakerSlash, X } from "@phosphor-icons/react";
+import { CaretDown, CaretUp, Cloud, SpeakerHigh, SpeakerSlash, X } from "@phosphor-icons/react";
 
 /**
  * The Network view: the constellation map is the hero, and EVERYTHING contextual lives in a
  * docked sidebar that is part of the layout — network roll-up, team detail, agent detail,
  * the dreams feed, and (when you hit Talk) the conversation itself. Nothing ever floats over
- * the map. On phones the sidebar stacks under the map.
+ * the map. On phones the sidebar is a bottom sheet: a summary bar (net + agents working) that
+ * taps to expand/collapse, so the map keeps its room until you want the detail.
  */
 export function NetworkView() {
   const teams = useNetworkStore((s) => s.teams);
@@ -30,10 +31,29 @@ export function NetworkView() {
   const soundOn = useJovaStore((s) => s.soundOn);
   const setSoundOn = useJovaStore((s) => s.setSoundOn);
   const [dreamsOpen, setDreamsOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(true); // mobile bottom-sheet expanded?
 
   const totals = rollup(teams, metricsWindow);
   const net = netOf(totals);
   const selectedAgent = focusedTeam && selectedAgentId ? focusedTeam.agents.find((a) => a.id === selectedAgentId) ?? null : null;
+
+  // tapping a team (or drilling into an agent) on mobile expands the sheet to show its detail
+  useEffect(() => {
+    if (focusedTeam) setSheetOpen(true);
+  }, [focusedTeam?.id, selectedAgentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // what the collapsed mobile bar shows — the key stat for whatever's in focus
+  const summary = (() => {
+    if (dreamsOpen) return { dot: "#c9a8ff", title: "Dreams", net: null as number | null, extra: `${dreamCount} idea${dreamCount === 1 ? "" : "s"}` };
+    if (focusedTeam && selectedAgent)
+      return { dot: focusedTeam.color, title: selectedAgent.label, net: null, extra: `${selectedAgent.tasks.length} task${selectedAgent.tasks.length === 1 ? "" : "s"}` };
+    if (focusedTeam) {
+      const tnet = netOf(scaleMetrics(focusedTeam.metrics, metricsWindow, focusedTeam.ageDays));
+      const working = focusedTeam.agents.filter((a) => a.tasks.length > 0).length;
+      return { dot: focusedTeam.color, title: focusedTeam.name, net: tnet, extra: `${working}/${focusedTeam.agents.length} working` };
+    }
+    return { dot: "#9fe8ff", title: "Network", net, extra: `${teams.length} teams` };
+  })();
 
   return (
     <div data-view="network" className="flex h-full w-full flex-col bg-void">
@@ -59,7 +79,9 @@ export function NetworkView() {
           </button>
           <button
             onClick={() => {
-              setDreamsOpen((v) => !v);
+              const next = !dreamsOpen;
+              setDreamsOpen(next);
+              if (next) setSheetOpen(true);
               if (chatOpen) setChatOpen(false);
             }}
             title="Dreams — daily improvement ideas from the PMs and Nexus"
@@ -78,49 +100,82 @@ export function NetworkView() {
         </div>
       </header>
 
-      {/* map + docked sidebar; stacks on phones */}
+      {/* map + docked sidebar; on phones the sidebar becomes an expand/contract bottom sheet */}
       <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-        <div className="relative h-[38dvh] shrink-0 sm:h-auto sm:min-h-0 sm:flex-1">
+        <div className="relative min-h-[30dvh] flex-1 sm:h-auto sm:min-h-0 sm:flex-1">
           <NetworkMap />
         </div>
 
-        <aside
-          data-network-sidebar
-          className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-line bg-panel sm:w-[360px] sm:flex-none sm:border-l sm:border-t-0"
-        >
-          {chatOpen ? (
+        {chatOpen ? (
+          <aside
+            data-network-sidebar
+            className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-line bg-panel sm:w-[360px] sm:flex-none sm:border-l sm:border-t-0"
+          >
             <ConversationPane compact onMinimize={() => setChatOpen(false)} />
-          ) : dreamsOpen ? (
-            <div className="flex min-h-0 flex-1 flex-col p-4">
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="text-sm font-semibold tracking-wide text-violet-100">Dreams</span>
-                <span className="ml-auto text-[10px] uppercase tracking-wider text-faint">{dreamCount}</span>
-                <button
-                  onClick={() => setDreamsOpen(false)}
-                  title="Close dreams"
-                  className="grid h-7 w-7 place-items-center rounded-lg text-faint transition hover:bg-raise"
-                >
-                  <X size={14} weight="bold" />
-                </button>
-              </div>
-              <DreamsFeed />
-            </div>
-          ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {focusedTeam && selectedAgent ? (
-                <div data-agent-detail>
-                  <AgentDetail team={focusedTeam} agent={selectedAgent} onBack={() => selectAgent(focusedTeam.id, null)} />
-                </div>
-              ) : focusedTeam ? (
-                <div data-team-detail>
-                  <TeamView team={focusedTeam} onSelect={(id) => selectAgent(focusedTeam.id, id)} />
+          </aside>
+        ) : (
+          <aside
+            data-network-sidebar
+            className="flex shrink-0 flex-col overflow-hidden border-t border-line bg-panel sm:h-auto sm:w-[360px] sm:flex-none sm:border-l sm:border-t-0"
+          >
+            {/* mobile summary / toggle bar — always visible; hidden on desktop */}
+            <button
+              onClick={() => setSheetOpen((v) => !v)}
+              aria-expanded={sheetOpen}
+              className={`flex shrink-0 items-center gap-2.5 px-4 py-3 text-left sm:hidden ${sheetOpen ? "border-b border-line" : ""}`}
+            >
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: summary.dot, boxShadow: `0 0 6px ${summary.dot}` }} />
+              <span className="truncate text-sm font-semibold" style={{ color: summary.dot }}>
+                {summary.title}
+              </span>
+              {summary.net !== null && (
+                <span className={`ml-auto shrink-0 font-mono text-[13px] ${summary.net >= 0 ? "text-emerald-300/90" : "text-rose-300/90"}`}>
+                  {summary.net >= 0 ? "+" : "−"}${Math.abs(summary.net).toFixed(2)}
+                </span>
+              )}
+              <span className={`shrink-0 text-[11px] text-mist ${summary.net === null ? "ml-auto" : ""}`}>{summary.extra}</span>
+              {sheetOpen ? <CaretDown size={14} weight="bold" className="shrink-0 text-faint" /> : <CaretUp size={14} weight="bold" className="shrink-0 text-faint" />}
+            </button>
+
+            {/* body — collapses on mobile (max-height), always open on desktop */}
+            <div
+              className={`flex min-h-0 flex-col overflow-hidden transition-[max-height] duration-300 ease-out sm:max-h-none sm:flex-1 ${
+                sheetOpen ? "max-h-[44dvh]" : "max-h-0"
+              }`}
+            >
+              {dreamsOpen ? (
+                <div className="flex min-h-0 flex-1 flex-col p-4">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="text-sm font-semibold tracking-wide text-violet-100">Dreams</span>
+                    <span className="ml-auto text-[10px] uppercase tracking-wider text-faint">{dreamCount}</span>
+                    <button
+                      onClick={() => setDreamsOpen(false)}
+                      title="Close dreams"
+                      className="grid h-7 w-7 place-items-center rounded-lg text-faint transition hover:bg-raise"
+                    >
+                      <X size={14} weight="bold" />
+                    </button>
+                  </div>
+                  <DreamsFeed />
                 </div>
               ) : (
-                <NexusOverviewBody />
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  {focusedTeam && selectedAgent ? (
+                    <div data-agent-detail>
+                      <AgentDetail team={focusedTeam} agent={selectedAgent} onBack={() => selectAgent(focusedTeam.id, null)} />
+                    </div>
+                  ) : focusedTeam ? (
+                    <div data-team-detail>
+                      <TeamView team={focusedTeam} onSelect={(id) => selectAgent(focusedTeam.id, id)} />
+                    </div>
+                  ) : (
+                    <NexusOverviewBody />
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </aside>
+          </aside>
+        )}
       </div>
     </div>
   );
