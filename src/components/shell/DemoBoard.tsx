@@ -64,11 +64,12 @@ export function DemoBoard({ team, style }: { team: Team; style?: CSSProperties }
                   {demos.length}
                 </span>
               )}
-              {/* title ticker along the bottom of the screen */}
+              {/* title ticker along the bottom of the screen — padding-left:100% starts the text
+                  just off the right edge so the crawl always crosses the whole screen */}
               <span className="absolute inset-x-0 bottom-0.5 overflow-hidden">
                 <span
                   className="motion-safe-anim inline-block whitespace-nowrap text-[8px] font-medium tracking-wide text-emerald-100/85"
-                  style={{ animation: "tv-ticker 7s linear infinite" }}
+                  style={{ animation: "tv-ticker 7s linear infinite", paddingLeft: "100%" }}
                 >
                   {demos[0]!.title}
                 </span>

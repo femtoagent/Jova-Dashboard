@@ -90,7 +90,8 @@ export function AgentDesk({
         height: DESK_H,
         transform: `translate(-50%, -100%) scale(${scale})`,
         transformOrigin: "50% 100%",
-        zIndex: z,
+        // a walking crewmate crosses open floor — lift its unit above the other furniture
+        zIndex: walking ? 400 : z,
       }}
     >
       {/* ground: shadow + selection/talking rings */}
@@ -153,8 +154,7 @@ export function AgentDesk({
         )}
         {bang && (
           <span
-            className="absolute -right-4 -top-4 grid h-5 w-5 place-items-center rounded-full rounded-bl-none border border-amber-300/60 bg-amber-400/20 text-[11px] font-bold text-amber-200 animate-[radial-pop_240ms_ease-out]"
-            style={{ transform: "translate(50%, -50%)" }}
+            className="absolute -right-5 -top-6 grid h-5 w-5 origin-bottom-left place-items-center rounded-full rounded-bl-none border border-amber-300/60 bg-amber-400/20 text-[11px] font-bold text-amber-200 animate-[pop-in_240ms_ease-out]"
             aria-hidden
           >
             !
@@ -201,8 +201,18 @@ export function AgentDesk({
         <path d="M 52 92 L 88 102 L 88 126 L 52 116 Z" fill="#0b0e18" stroke="rgba(160,190,255,0.22)" strokeWidth="1.2" />
         {active && <path d="M 55 95 L 85 104 L 85 123 L 55 114 Z" fill="none" stroke={team.color} strokeOpacity="0.75" strokeWidth="1.4" />}
         <line x1="70" y1="120" x2="70" y2="128" stroke="rgba(160,190,255,0.25)" strokeWidth="2" />
-        {/* screen-light cast toward the crewmate */}
-        {active && <ellipse cx="98" cy="100" rx="27" ry="15" fill={team.color} opacity="0.13" />}
+        {/* screen light: a cone rising from the monitor to the crewmate's face, fading upward */}
+        {active && (
+          <>
+            <defs>
+              <linearGradient id={`cast-${agent.id}`} x1="0" y1="1" x2="0.4" y2="0">
+                <stop offset="0%" stopColor={team.color} stopOpacity="0.22" />
+                <stop offset="100%" stopColor={team.color} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={`M 54 94 L 88 103 L 108 62 L 74 50 Z`} fill={`url(#cast-${agent.id})`} />
+          </>
+        )}
         {/* a mug on the desk when relaxing */}
         {!active && (
           <g opacity="0.85">
@@ -270,17 +280,17 @@ export function AgentDesk({
         })}
       </div>
 
-      {/* rising work motes while active */}
+      {/* work sparks rising OFF THE SCREEN while active (they read as output, not decoration) */}
       {active && (
         <>
           <span
             className="motion-safe-anim absolute h-1.5 w-1.5 rounded-full"
-            style={{ left: 88, top: 96, background: team.color, animation: "mote-rise 2.4s ease-out infinite", opacity: 0, zIndex: 4 }}
+            style={{ left: 62, top: 88, background: team.color, animation: "mote-rise 2.4s ease-out infinite", opacity: 0, zIndex: 4 }}
             aria-hidden
           />
           <span
             className="motion-safe-anim absolute h-1 w-1 rounded-full"
-            style={{ left: 112, top: 100, background: c.accent, animation: "mote-rise 2.4s ease-out 1.1s infinite", opacity: 0, zIndex: 4 }}
+            style={{ left: 78, top: 92, background: c.accent, animation: "mote-rise 2.4s ease-out 1.1s infinite", opacity: 0, zIndex: 4 }}
             aria-hidden
           />
         </>
@@ -319,9 +329,8 @@ function Sheet({
   flight: FlowEvent | undefined;
   onLanded: () => void;
 }) {
-  const [delayMs] = useState(() =>
-    flight ? (flight.kind === "handoff" ? 1600 : flight.fromAgentId === null ? 1450 : 950) : 0
-  );
+  // walkers (any flow with a visible sender) toss late; Nexus tosses after its window wind-up
+  const [delayMs] = useState(() => (flight ? (flight.fromAgentId === null ? 1450 : 1750) : 0));
   useEffect(() => {
     if (!delayMs) return;
     const t = window.setTimeout(onLanded, delayMs + 100);

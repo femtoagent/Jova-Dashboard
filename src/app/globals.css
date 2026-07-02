@@ -307,13 +307,47 @@ select:focus-visible,
   }
 }
 
-/* the demo TV's title ticker */
+/* the demo TV's title ticker — the span carries padding-left:100% (container width), so
+   translating by its OWN full width always enters from the right edge and exits the left,
+   whatever the title length */
 @keyframes tv-ticker {
   from {
-    transform: translateX(100%);
+    transform: translateX(0);
   }
   to {
     transform: translateX(-100%);
+  }
+}
+
+/* a speech bubble popping in (scale only — no translate, so it can't jump on finish) */
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* the PM's confetti bomb — each fleck rises to --peak while spreading, then falls to --fall */
+@keyframes confetti-bomb {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(calc(var(--dx, 0px) * 0.45), var(--peak, -100px)) rotate(140deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx, 0px), var(--fall, 90px)) rotate(340deg);
   }
 }
 
@@ -477,6 +511,7 @@ select:focus-visible,
 input[type="range"] {
   height: 4px;
 }
+
 
 
 

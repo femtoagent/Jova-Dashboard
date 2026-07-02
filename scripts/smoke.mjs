@@ -232,14 +232,15 @@ check(
   await store(() => [...document.querySelectorAll('[data-initiative="done"]')].some((r) => r.textContent.includes("Ship the smoke feature"))),
   "completed initiative is crossed out before dropping off",
 );
+check(await store(() => !!document.querySelector("[data-confetti-bomb]")), "shipping an initiative fires the PM's confetti bomb");
 
-// handoff flight: the packet carries its sender, then clears
+// handoff flight: the sender walks first, then the packet carries its sender, then clears
 await store((id) => {
   const t = window.__networkStore.getState().teams.find((x) => x.id === "forge");
   const pm = t.agents.find((x) => x.role === "pm");
   window.__networkStore.getState().emitFlow({ teamId: "forge", fromAgentId: pm.id, toAgentId: id, taskId: "smoke-flight", taskTitle: "Flight test", kind: "assign" });
 }, dev);
-await wait(350);
+await wait(1150); // the sender walks ~920ms before the toss
 check(
   await store(() => {
     const p = document.querySelector("[data-flow-packet]");
@@ -248,7 +249,7 @@ check(
   "handoff packet flies with a readable sender",
 );
 await page.screenshot({ path: "demo-team-room.png" });
-await wait(1600);
+await wait(1500);
 // OUR flight must be gone (the live driver keeps emitting flows of its own)
 check(
   await store(() => !window.__networkStore.getState().flows.some((f) => f.taskId === "smoke-flight")),

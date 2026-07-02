@@ -13,20 +13,30 @@ export interface Anchor {
 
 const FLIGHT_MS = 950;
 const LAND_MS = 340;
-/** on a handoff the SENDER walks this share of the way (capped), then tosses the doc the rest */
-export const WALK_FRACTION = 0.45;
-export const WALK_MAX_PX = 150;
-export const WALK_MS = 650;
+/** the SENDER walks this share of the way (capped), then tosses the doc the rest */
+export const WALK_FRACTION = 0.58;
+export const WALK_MAX_PX = 190;
+/** total walk time before the toss: sidestep around the desk, then the main leg */
+export const WALK_MS = 840;
 /** how long the Nexus orb winds up outside the window before the toss */
 export const NEXUS_WINDUP_MS = 550;
 
-/** The sender's walk vector for a handoff (shared with TeamRoom, which slides the crewmate). */
+/** The sender's walk vector (shared with TeamRoom, which slides the crewmate). */
 export function walkVector(from: Anchor, to: Anchor): Anchor {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy) || 1;
   const walk = Math.min(len * WALK_FRACTION, WALK_MAX_PX);
   return { x: (dx / len) * walk, y: (dy / len) * walk };
+}
+
+/**
+ * The first leg: step out from BEHIND the desk (sideways toward the target + forward past the
+ * desk front) so the walk goes around the furniture instead of through it.
+ */
+export function sidestepVector(from: Anchor, to: Anchor, scale: number): Anchor {
+  const side = to.x >= from.x ? 1 : -1;
+  return { x: side * 64 * scale, y: 46 * scale };
 }
 
 /**
@@ -81,10 +91,10 @@ function Packet({
 
   const senderAnchor = flow.fromAgentId === null ? nexusAnchor : anchors[flow.fromAgentId ?? ""];
   const to = anchors[flow.toAgentId];
-  const isHandoff = flow.kind === "handoff" && !!sender;
-  // handoffs launch from where the walking sender STOPS; others from the sender's desk / window
-  const from = isHandoff && senderAnchor && to ? add(senderAnchor, walkVector(senderAnchor, to)) : senderAnchor;
-  const delay = isHandoff ? WALK_MS + 80 : flow.fromAgentId === null ? NEXUS_WINDUP_MS : 0;
+  const walks = !!sender; // ANY flow with a visible sender walks (assign and handoff alike)
+  // walkers launch from where they STOP; Nexus tosses from the window after its wind-up
+  const from = walks && senderAnchor && to ? add(senderAnchor, walkVector(senderAnchor, to)) : senderAnchor;
+  const delay = walks ? WALK_MS + 80 : flow.fromAgentId === null ? NEXUS_WINDUP_MS : 0;
 
   useEffect(() => {
     const clear = () => useNetworkStore.getState().clearFlow(flow.id);

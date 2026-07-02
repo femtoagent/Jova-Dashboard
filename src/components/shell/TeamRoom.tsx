@@ -7,7 +7,7 @@ import { officeTheme } from "@/lib/network/officeThemes";
 import type { Team } from "@/lib/network/types";
 import { OfficeBackdrop, windowRect } from "./OfficeBackdrop";
 import { AgentDesk, DESK_W, DESK_H } from "./AgentDesk";
-import { HandoffLayer, NexusVisitors, walkVector, WALK_MS, type Anchor } from "./HandoffLayer";
+import { HandoffLayer, NexusVisitors, sidestepVector, walkVector, WALK_MS, type Anchor } from "./HandoffLayer";
 import { InitiativeBoard } from "./InitiativeBoard";
 import { DemoBoard } from "./DemoBoard";
 import { ArrowLeft, CornersIn, CornersOut } from "@phosphor-icons/react";
@@ -15,6 +15,72 @@ import { ArrowLeft, CornersIn, CornersOut } from "@phosphor-icons/react";
 interface Box {
   w: number;
   h: number;
+}
+
+/**
+ * The PM's confetti bomb — an initiative just shipped, so the whole room gets showered:
+ * a burst of flecks fires from the PM's desk, arcs OVER the team, and rains down. One-shot
+ * (keyed by celebrateTick), colors from the team + white/amber, angles derived per fleck.
+ */
+function ConfettiBomb({
+  origin,
+  fallbackX,
+  fallbackY,
+  spreadX,
+  color,
+}: {
+  origin?: { x: number; y: number };
+  fallbackX: number;
+  fallbackY: number;
+  spreadX: number;
+  color: string;
+}) {
+  const ox = origin?.x ?? fallbackX;
+  const oy = (origin?.y ?? fallbackY) - 24;
+  const COLORS = [color, "#f4f7ff", "#ffd27f", "#9fe8ff"];
+  return (
+    <div data-confetti-bomb className="pointer-events-none absolute inset-0" style={{ zIndex: 720 }} aria-hidden>
+      {/* the pop at the PM */}
+      <span
+        className="motion-safe-anim absolute h-10 w-10 rounded-full border-2"
+        style={{
+          left: ox,
+          top: oy,
+          borderColor: color,
+          transform: "translate(-50%, -50%)",
+          animation: "presence-ripple 500ms ease-out forwards",
+        }}
+      />
+      {Array.from({ length: 26 }, (_, i) => {
+        // deterministic fan: spread across the room, varied peaks and falls
+        const t = i / 25; // 0..1 across the fan
+        const dx = (t - 0.5) * 2 * spreadX * (0.7 + ((i * 37) % 10) / 33);
+        const peak = -(90 + ((i * 53) % 90));
+        const fall = 90 + ((i * 29) % 130);
+        return (
+          <span
+            key={i}
+            className="motion-safe-anim absolute"
+            style={
+              {
+                left: ox,
+                top: oy,
+                width: i % 2 ? 5 : 4,
+                height: i % 2 ? 3 : 7,
+                borderRadius: 1,
+                background: COLORS[i % COLORS.length],
+                "--dx": `${dx}px`,
+                "--peak": `${peak}px`,
+                "--fall": `${fall}px`,
+                animation: `confetti-bomb ${1200 + ((i * 41) % 500)}ms ease-out ${i * 22}ms forwards`,
+                opacity: 0,
+              } as React.CSSProperties
+            }
+          />
+        );
+      })}
+    </div>
+  );
 }
 
 /** below this desk scale the room stops shrinking and becomes pannable instead */
@@ -146,12 +212,17 @@ export function TeamRoom({ team }: { team: Team }) {
   // ---- room celebration: an initiative (PM task) just shipped ----
   const pm = team.agents.find((a) => a.role === "pm");
   const [celebrateTick, setCelebrateTick] = useState(0);
+  const [bombLive, setBombLive] = useState(false); // the confetti layer unmounts after the shower
   const prevPmTasks = useRef<string[]>(pm?.tasks.map((t) => t.id) ?? []);
   useEffect(() => {
     const cur = pm?.tasks.map((t) => t.id) ?? [];
     const finished = prevPmTasks.current.some((id) => !cur.includes(id));
     prevPmTasks.current = cur;
-    if (finished) setCelebrateTick((n) => n + 1);
+    if (!finished) return;
+    setCelebrateTick((n) => n + 1);
+    setBombLive(true);
+    const t = window.setTimeout(() => setBombLive(false), 2500);
+    return () => window.clearTimeout(t);
   }, [pm?.tasks, pm]);
 
   // ---- walking handoffs: slide the sender partway on the flight's clock ----
@@ -172,26 +243,30 @@ export function TeamRoom({ team }: { team: Team }) {
 
   useEffect(() => {
     for (const f of flows) {
-      if (f.teamId !== team.id || f.kind !== "handoff" || !f.fromAgentId || seenFlows.current.has(f.id)) continue;
+      // ANY flow with a visible sender walks — assigns and handoffs alike (Nexus stays outside)
+      if (f.teamId !== team.id || !f.fromAgentId || seenFlows.current.has(f.id)) continue;
       seenFlows.current.add(f.id);
       const from = anchors[f.fromAgentId];
       const to = anchors[f.toAgentId];
       if (!from || !to) continue;
-      const v = walkVector(from, to);
       const sender = f.fromAgentId;
-      setWalks((w) => ({ ...w, [sender]: v }));
-      // start walking back right after the toss
+      const step = sidestepVector(from, to, layout.scale); // leg 1: around the desk
+      const dest = walkVector(from, to); // leg 2: toward the receiver
+      const setWalk = (v: Anchor | null) =>
+        setWalks((w) => {
+          if (v) return { ...w, [sender]: v };
+          const next = { ...w };
+          delete next[sender];
+          return next;
+        });
+      setWalk(step);
       walkTimers.current.push(
-        window.setTimeout(() => {
-          setWalks((w) => {
-            const next = { ...w };
-            delete next[sender];
-            return next;
-          });
-        }, WALK_MS + 220),
+        window.setTimeout(() => setWalk(dest), 300), // main leg (arrives ~WALK_MS, then the toss)
+        window.setTimeout(() => setWalk(step), WALK_MS + 240), // walk back around the desk…
+        window.setTimeout(() => setWalk(null), WALK_MS + 620), // …and slot back in behind it
       );
     }
-  }, [flows, team.id, anchors]);
+  }, [flows, team.id, anchors, layout.scale]);
   useEffect(
     () => () => {
       for (const t of walkTimers.current) window.clearTimeout(t);
@@ -283,6 +358,16 @@ export function TeamRoom({ team }: { team: Team }) {
               />
             ))}
             <HandoffLayer team={team} anchors={anchors} nexusAnchor={nexusAnchor} />
+            {bombLive && (
+              <ConfettiBomb
+                key={celebrateTick}
+                origin={pm ? anchors[pm.id] : undefined}
+                fallbackX={box.w / 2}
+                fallbackY={wallH + (box.h - wallH) / 2}
+                spreadX={box.w * 0.36}
+                color={team.color}
+              />
+            )}
           </div>
         </>
       )}
