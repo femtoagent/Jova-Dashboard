@@ -14,17 +14,27 @@ import { rollup, scaleMetrics, net as netOf } from "@/lib/network/ledger";
  */
 export function NexusInfoPanel() {
   const focusedTeamId = useNetworkStore((s) => s.focusedTeamId);
+  if (focusedTeamId) return null; // the Team HQ panel takes over when one is focused
+  return (
+    <div className="fixed bottom-2 left-2 z-10 max-h-[44dvh] w-[min(320px,calc(100vw-100px))] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-white/85 backdrop-blur-xl sm:bottom-5 sm:left-4 sm:max-h-[80vh] sm:w-[min(320px,82vw)]">
+      <NexusOverviewBody />
+      <p className="mt-3 text-[10px] leading-snug text-white/35">Click a team to fly there · click Jova to talk</p>
+    </div>
+  );
+}
+
+/** The network roll-up + team list — shared by this panel and the shell's Network sidebar. */
+export function NexusOverviewBody() {
   const teams = useNetworkStore((s) => s.teams);
   const metricsWindow = useNetworkStore((s) => s.metricsWindow);
   const focusTeam = useNetworkStore((s) => s.focusTeam);
   const openChatWith = useJovaStore((s) => s.openChatWith);
   const openSettings = useSettingsStore((s) => s.openSettings);
   const showNexus = useSettingsStore((s) => s.showNexus);
-  if (focusedTeamId) return null; // the Team HQ panel takes over when one is focused
 
   const totals = rollup(teams, metricsWindow);
   return (
-    <div className="fixed bottom-2 left-2 z-10 max-h-[44dvh] w-[min(320px,calc(100vw-100px))] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-white/85 backdrop-blur-xl sm:bottom-5 sm:left-4 sm:max-h-[80vh] sm:w-[min(320px,82vw)]">
+    <div>
       <div className="mb-3 flex items-center gap-2">
         <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "#9fe8ff", boxShadow: "0 0 10px #9fe8ff" }} />
         <span className="text-sm font-semibold tracking-wide text-cyan-100">Network</span>
@@ -83,8 +93,6 @@ export function NexusInfoPanel() {
       >
         Manage teams
       </button>
-
-      <p className="mt-3 text-[10px] leading-snug text-white/35">Click a team to fly there · click Jova to talk</p>
     </div>
   );
 }

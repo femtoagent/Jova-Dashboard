@@ -14,7 +14,7 @@ import { SettingsGear } from "@/components/settings/SettingsGear";
 import { SettingsOverlay } from "@/components/settings/SettingsOverlay";
 import { WorldToggle } from "@/components/WorldToggle";
 import { ViewToggle } from "@/components/ViewToggle";
-import { DefaultStage } from "@/components/stage/DefaultStage";
+import { AppShell } from "@/components/shell/AppShell";
 import { DocPanel } from "@/components/docs/DocPanel";
 import { VoiceLayer } from "@/components/voice/VoiceLayer";
 import { useVoicePrefs } from "@/lib/settings/useVoicePrefs";
@@ -71,9 +71,13 @@ export function CommandCenter() {
     return () => setOnVoiceUnavailable(null);
   }, [hydrateJovaStyle, hydrateViewMode, hydrateVoicePrefs, hydrateAgentVoices, refreshVoiceStatus]);
 
-  // Ensure a session exists.
+  // Ensure a session exists. createSession opens the chat pane (right for the classic world);
+  // the Default shell boots to the STAGE instead — her greeting arrives as captions on it.
   useEffect(() => {
-    if (sessionCount === 0) createSession("First contact");
+    if (sessionCount === 0) {
+      createSession("First contact");
+      if (useJovaStore.getState().viewMode !== "3d") useJovaStore.getState().setChatOpen(false);
+    }
   }, [sessionCount, createSession]);
 
   // Greet once on load (she's "present" from the start now), unprompted.
@@ -87,24 +91,33 @@ export function CommandCenter() {
   return (
     <AuthGate>
       <main className="relative h-dvh w-screen overflow-hidden bg-[#04070a] text-white">
-        <div className="absolute inset-0">
-          {viewMode === "3d" ? <SceneCanvas /> : <DefaultStage />}
-        </div>
-        <div className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-20 flex -translate-x-1/2 items-center gap-2">
-          <WorldToggle />
-          <ViewToggle />
-        </div>
-        <DemoControls />
-        {fullMode && <NexusInfoPanel />}
-        {fullMode && <DreamerPane />}
-        {fullMode && <TeamInfoPanel />}
-        <ChatSurface />
-        <VoiceLayer />
-        <DocPanel />
-        {/* The cog lives on both screens: the network opens full Settings; "just Jova" opens her editor. */}
-        {fullMode ? <SettingsGear /> : <SettingsGear to="jova" title="Edit Jova" />}
-        <SettingsOverlay />
+        {viewMode === "3d" ? <ClassicWorld fullMode={fullMode} /> : <AppShell />}
       </main>
     </AuthGate>
+  );
+}
+
+/** The original 3D world, exactly as it was — full-screen scene + floating glass chrome. */
+function ClassicWorld({ fullMode }: { fullMode: boolean }) {
+  return (
+    <>
+      <div className="absolute inset-0">
+        <SceneCanvas />
+      </div>
+      <div className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-20 flex -translate-x-1/2 items-center gap-2">
+        <WorldToggle />
+        <ViewToggle />
+      </div>
+      <DemoControls />
+      {fullMode && <NexusInfoPanel />}
+      {fullMode && <DreamerPane />}
+      {fullMode && <TeamInfoPanel />}
+      <ChatSurface />
+      <VoiceLayer />
+      <DocPanel />
+      {/* The cog lives on both screens: the network opens full Settings; "just Jova" opens her editor. */}
+      {fullMode ? <SettingsGear /> : <SettingsGear to="jova" title="Edit Jova" />}
+      <SettingsOverlay />
+    </>
   );
 }

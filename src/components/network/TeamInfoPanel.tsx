@@ -37,7 +37,8 @@ export function TeamInfoPanel() {
   );
 }
 
-function TeamView({ team, onSelect }: { team: Team; onSelect: (agentId: string) => void }) {
+/** Team detail (agents, metrics, approvals) — shared by this panel and the shell's Network sidebar. */
+export function TeamView({ team, onSelect }: { team: Team; onSelect: (agentId: string) => void }) {
   const resolveApproval = useNetworkStore((s) => s.resolveApproval);
   const metricsWindow = useNetworkStore((s) => s.metricsWindow);
   const openTeam = useSettingsStore((s) => s.openTeam);
@@ -136,7 +137,8 @@ function TeamView({ team, onSelect }: { team: Team; onSelect: (agentId: string) 
   );
 }
 
-function AgentDetail({ team, agent, onBack }: { team: Team; agent: AgentNode; onBack: () => void }) {
+/** Agent detail (tasks, recents, talk/edit) — shared by this panel and the shell's Network sidebar. */
+export function AgentDetail({ team, agent, onBack }: { team: Team; agent: AgentNode; onBack: () => void }) {
   const setTalkingAgent = useNetworkStore((s) => s.setTalkingAgent);
   const openChatWith = useJovaStore((s) => s.openChatWith);
   const openAgent = useSettingsStore((s) => s.openAgent);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useJovaStore, type JovaStyle } from "@/lib/state/useJovaStore";
 import { setSpeaking } from "@/lib/audio/amplitude";
 
@@ -33,12 +33,8 @@ export function DemoControls() {
   const viewMode = useJovaStore((s) => s.viewMode);
   const jovaStyle = useJovaStore((s) => s.jovaStyle);
   const setJovaStyle = useJovaStore((s) => s.setJovaStyle);
-  const [open, setOpen] = useState(true);
-
-  // this is a dev panel — fold it away by default on phones so it doesn't cover the scene
-  useEffect(() => {
-    if (window.matchMedia("(max-width: 640px)").matches) setOpen(false);
-  }, []);
+  // dev panel — starts folded to a chip so it never covers the stage or map
+  const [open, setOpen] = useState(false);
 
   const speakTest = () => {
     setWispState("speaking");
@@ -53,7 +49,7 @@ export function DemoControls() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-[11px] text-white/70 backdrop-blur-md transition hover:bg-white/10"
+        className="fixed left-[calc(var(--chrome-left,0px)_+_1rem)] top-[max(1rem,env(safe-area-inset-top))] z-10 rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-[11px] text-white/70 backdrop-blur-md transition hover:bg-white/10"
       >
         ⚙ Demo
       </button>
@@ -61,7 +57,7 @@ export function DemoControls() {
   }
 
   return (
-    <div className="fixed left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 w-56 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-white/80 backdrop-blur-md">
+    <div className="fixed left-[calc(var(--chrome-left,0px)_+_1rem)] top-[max(1rem,env(safe-area-inset-top))] z-10 w-56 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-white/80 backdrop-blur-md">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-semibold text-white/90">Demo controls</span>
         <div className="flex items-center gap-1.5">

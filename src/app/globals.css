@@ -5,10 +5,36 @@
     Roboto, Helvetica, Arial, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas,
     monospace;
+
+  /* ---- the Default-view design system: deep void, matte surfaces, one glowing accent ---- */
+  --color-void: #07080c; /* app background */
+  --color-panel: #0e1016; /* resting surface */
+  --color-raise: #151824; /* hover / elevated surface */
+  --color-line: rgb(228 234 248 / 0.08); /* hairline borders */
+  --color-line2: rgb(228 234 248 / 0.16); /* emphasized hairline */
+  --color-bright: #edf0f7; /* primary text */
+  --color-mist: #9aa2b2; /* secondary text */
+  --color-faint: #5d6475; /* tertiary text */
+  --color-jova: #4cc9ff; /* HER blue — the only glowing accent in the chrome */
 }
 
 :root {
   color-scheme: dark;
+  /* offsets for fixed chrome (voice orb, demo panel) so it clears whatever nav is present:
+     none in the classic 3D world, the rail / bottom tab bar in the Default shell */
+  --chrome-left: 0px;
+  --chrome-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.shell-chrome {
+  --chrome-left: 0px;
+  --chrome-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 640px) {
+  .shell-chrome {
+    --chrome-left: 56px;
+    --chrome-bottom: 0px;
+  }
 }
 
 html,
@@ -162,3 +188,4 @@ body {
 input[type="range"] {
   height: 4px;
 }
+

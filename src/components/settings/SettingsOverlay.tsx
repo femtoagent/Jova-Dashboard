@@ -32,25 +32,11 @@ const AGENT_NAV: { key: AgentSection; label: string }[] = [
   { key: "access", label: "Access" },
 ];
 
-/** Full-screen Settings/Admin overlay. Mounted always; renders null until opened. */
+/** Full-screen Settings/Admin overlay (classic 3D mode). Mounted always; renders null until opened. */
 export function SettingsOverlay() {
   const open = useSettingsStore((s) => s.open);
-  const screen = useSettingsStore((s) => s.screen);
   const closeSettings = useSettingsStore((s) => s.closeSettings);
   const downOnScrim = useRef(false);
-  // "▾ more" hint on the shared scroll container — covers every plain-flow screen. The two screens with
-  // their own inner scroll (Logs, LLM Presets) are h-full here, so this container doesn't scroll for them
-  // (no double hint); they carry their own via the same helper.
-  const { scrollRef, more } = useScrollMore();
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeSettings();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, closeSettings]);
 
   if (!open) return null;
 
@@ -68,36 +54,64 @@ export function SettingsOverlay() {
     >
       {/* full-screen sheet on phones; floating modal from sm up */}
       <div className="relative flex h-dvh w-screen flex-col overflow-hidden bg-black/60 pt-[env(safe-area-inset-top)] text-white/85 shadow-[0_0_80px_rgba(0,180,255,0.08)] backdrop-blur-xl sm:h-[min(760px,92vh)] sm:w-[min(1040px,96vw)] sm:flex-row sm:rounded-2xl sm:border sm:border-white/10 sm:pt-0">
-        <button
-          onClick={closeSettings}
-          title="Close (Esc)"
-          className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] z-10 grid h-9 w-9 place-items-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white/80 sm:right-3 sm:top-3 sm:h-8 sm:w-8"
-        >
-          ✕
-        </button>
-        {screen === "agent" ? <AgentNav /> : <TopNav />}
-
-        <div className="relative flex min-w-0 flex-1 flex-col">
-          <div ref={scrollRef} className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-            {screen === "teams" && <TeamsAdmin />}
-            {screen === "team" && <TeamEditor />}
-            {screen === "agent" && <AgentEditor />}
-            {screen === "logs" && <LogsScreen />}
-            {screen === "history" && <HistoryScreen />}
-            {screen === "nexus" && <NexusEditor />}
-            {screen === "jova" && <JovaEditor />}
-            {screen === "agents" && <AgentsScreen />}
-            {screen === "agentCreate" && <CreateAgentScreen />}
-            {screen === "agentEdit" && <EditAgentScreen />}
-            {screen === "presets" && <LlmPresetsScreen />}
-            {screen === "memoryReview" && <MemoryReviewScreen />}
-            {screen === "chat" && <ChatScreen />}
-            {screen === "voice" && <VoiceScreen />}
-          </div>
-          <ScrollMore show={more} />
-        </div>
+        <SettingsPanel />
       </div>
     </div>
+  );
+}
+
+/**
+ * The settings sheet itself — nav rail (horizontal chip row on phones) + the active screen.
+ * Shared by the classic overlay above and the Default shell's Settings view. The parent
+ * supplies the frame; this fills it. Escape closes wherever it's mounted.
+ */
+export function SettingsPanel() {
+  const screen = useSettingsStore((s) => s.screen);
+  const closeSettings = useSettingsStore((s) => s.closeSettings);
+  // "▾ more" hint on the shared scroll container — covers every plain-flow screen. The two screens with
+  // their own inner scroll (Logs, LLM Presets) are h-full here, so this container doesn't scroll for them
+  // (no double hint); they carry their own via the same helper.
+  const { scrollRef, more } = useScrollMore();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeSettings();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeSettings]);
+
+  return (
+    <>
+      <button
+        onClick={closeSettings}
+        title="Close (Esc)"
+        className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] z-10 grid h-9 w-9 place-items-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white/80 sm:right-3 sm:top-3 sm:h-8 sm:w-8"
+      >
+        ✕
+      </button>
+      {screen === "agent" ? <AgentNav /> : <TopNav />}
+
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <div ref={scrollRef} className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          {screen === "teams" && <TeamsAdmin />}
+          {screen === "team" && <TeamEditor />}
+          {screen === "agent" && <AgentEditor />}
+          {screen === "logs" && <LogsScreen />}
+          {screen === "history" && <HistoryScreen />}
+          {screen === "nexus" && <NexusEditor />}
+          {screen === "jova" && <JovaEditor />}
+          {screen === "agents" && <AgentsScreen />}
+          {screen === "agentCreate" && <CreateAgentScreen />}
+          {screen === "agentEdit" && <EditAgentScreen />}
+          {screen === "presets" && <LlmPresetsScreen />}
+          {screen === "memoryReview" && <MemoryReviewScreen />}
+          {screen === "chat" && <ChatScreen />}
+          {screen === "voice" && <VoiceScreen />}
+        </div>
+        <ScrollMore show={more} />
+      </div>
+    </>
   );
 }
 

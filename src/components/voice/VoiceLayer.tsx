@@ -19,7 +19,7 @@ import { Microphone } from "@phosphor-icons/react";
  * SEE during a turn is chosen by feedbackMode. The HUD is redundant with the always-on control's own
  * status line, so it's suppressed when triggerMode is "always".
  */
-export function VoiceLayer() {
+export function VoiceLayer({ feedback = true }: { feedback?: boolean }) {
   const triggerMode = useVoicePrefs((s) => s.triggerMode);
   const feedbackMode = useVoicePrefs((s) => s.feedbackMode);
   const pttKey = useVoicePrefs((s) => s.pttKey);
@@ -67,7 +67,8 @@ export function VoiceLayer() {
   if (chatOpen) return null; // ambient chrome is for when the chat is collapsed
 
   // The HUD overlaps (and duplicates) the always-on control's status line — hide it in that mode.
-  const showFeedback = !(triggerMode === "always" && feedbackMode === "hud");
+  // The Default shell passes feedback=false: its stage captions carry the turn, only triggers render.
+  const showFeedback = feedback && !(triggerMode === "always" && feedbackMode === "hud");
 
   return (
     <>
@@ -113,7 +114,7 @@ function VoiceOrb({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       title={micOn ? "Stop listening" : "Talk to Jova"}
-      className={`fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-4 z-30 grid h-14 w-14 place-items-center rounded-full border backdrop-blur-md transition sm:left-6 ${
+      className={`fixed bottom-[calc(var(--chrome-bottom,0px)_+_6.5rem)] left-[calc(var(--chrome-left,0px)_+_1rem)] z-30 grid h-14 w-14 place-items-center rounded-full border backdrop-blur-md transition sm:bottom-[calc(var(--chrome-bottom,0px)_+_1.5rem)] sm:left-[calc(var(--chrome-left,0px)_+_1.5rem)] ${
         micOn ? "border-cyan-300/50 bg-cyan-400/25 text-cyan-50 shadow-[0_0_24px_rgba(34,211,238,0.4)]" : "border-white/15 bg-black/40 text-white/70 hover:bg-white/10"
       }`}
     >
@@ -128,7 +129,7 @@ function PttHint({ code }: { code: string }) {
   const listening = useJovaStore((s) => s.listening);
   return (
     <div
-      className={`fixed bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full border px-4 py-2 text-sm backdrop-blur-md transition ${
+      className={`fixed bottom-[calc(var(--chrome-bottom,0px)_+_6rem)] left-1/2 z-30 -translate-x-1/2 rounded-full border px-4 py-2 text-sm backdrop-blur-md transition ${
         listening ? "border-cyan-300/50 bg-cyan-400/20 text-cyan-50" : "border-white/15 bg-black/40 text-white/65"
       }`}
     >
@@ -156,7 +157,7 @@ function AlwaysControl({ onToggle }: { onToggle: () => void }) {
     <button
       onClick={onToggle}
       title={micOn ? "Pause listening" : "Resume listening"}
-      className="fixed bottom-24 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-white/15 bg-black/40 px-4 py-2 backdrop-blur-md transition hover:bg-white/10"
+      className="fixed bottom-[calc(var(--chrome-bottom,0px)_+_6rem)] left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-white/15 bg-black/40 px-4 py-2 backdrop-blur-md transition hover:bg-white/10"
     >
       <span className="relative grid h-8 w-8 place-items-center">
         {listening && <span className="absolute inset-0 grid place-items-center"><MicRing size={30} /></span>}
