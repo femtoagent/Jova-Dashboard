@@ -89,9 +89,30 @@ check(await clickByTitle("Open the conversation"), "conversation button clickabl
 await wait(500);
 check(await store(() => !!document.querySelector("[data-conversation]")), "conversation mode opens");
 await page.screenshot({ path: "demo-conversation.png" });
+// clicking off the panel (the backdrop gutter) closes it, like Back-to-stage
+await page.mouse.click(120, 400);
+await wait(500);
+check(
+  await store(() => !document.querySelector("[data-conversation]") && !!document.querySelector('[data-jova-presence="hero"]')),
+  "clicking off the conversation closes it",
+);
+// re-open and confirm the explicit Back button still works
+check(await clickByTitle("Open the conversation"), "conversation re-opens");
+await wait(400);
 check(await clickByTitle("Back to the stage"), "minimize-to-stage clickable");
 await wait(500);
 check(await store(() => !!document.querySelector('[data-jova-presence="hero"]')), "back on the stage");
+// no stray focus ring: after the swap, nothing non-interactive carries an outline
+check(
+  await store(() => {
+    const bad = [...document.querySelectorAll("[data-view], [data-shell], main, div")].find((el) => {
+      const cs = getComputedStyle(el);
+      return cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) > 0;
+    });
+    return !bad;
+  }),
+  "no focus outline on a container after maximizing",
+);
 
 // ---- 2. Network view via the rail -------------------------------------------
 await page.click('button[aria-label="Network"]');
@@ -181,32 +202,46 @@ check(
 );
 await page.screenshot({ path: "demo-mobile-conversation.png" });
 await store(() => window.__jovaStore.getState().setChatOpen(false));
+// start from a clean sheet preference so we can verify the collapsed default
+await store(() => localStorage.removeItem("jova.networkSheetOpen"));
+await page.reload({ waitUntil: "networkidle2", timeout: 30000 });
+await page.waitForFunction(() => !!window.__jovaStore, { timeout: 15000 });
 await page.click('button[aria-label="Network"]');
 await wait(700);
 check(await store(() => !!document.querySelector("[data-network-map]")), "mobile: network view opens");
 
-// mobile: tapping a team expands the sheet to its detail; the collapse bar shows net + agents
+const bodyH = () =>
+  store(() => {
+    const body = document.querySelector("[data-team-detail]")?.closest("div.flex.min-h-0.flex-col");
+    return body ? body.getBoundingClientRect().height : -1;
+  });
+const tapBar = () => store(() => document.querySelector('[data-network-sidebar] button[aria-expanded]')?.click());
+
+// focus a team — sheet stays COLLAPSED by default; the bar shows net + agents working
 await store(() => window.__networkStore.getState().focusTeam("forge"));
 await wait(500);
-const teamBarText = await store(() => {
-  const bar = [...document.querySelectorAll('[data-network-sidebar] button[aria-expanded]')][0];
-  return bar ? bar.textContent : "";
-});
-check(await store(() => !!document.querySelector("[data-team-detail]")), "mobile: tapping a team shows its detail");
+check((await bodyH()) < 8, "mobile: team sheet is collapsed by default");
+const teamBarText = await store(() => document.querySelector('[data-network-sidebar] button[aria-expanded]')?.textContent || "");
 check(/\$/.test(teamBarText) && /working/.test(teamBarText), "mobile: summary bar shows net + agents working");
-await page.screenshot({ path: "demo-mobile-team-expanded.png" });
-// collapse it — detail hides, summary bar stays
-await store(() => [...document.querySelectorAll('[data-network-sidebar] button[aria-expanded="true"]')][0]?.click());
-await wait(500);
-check(
-  await store(() => {
-    const body = document.querySelector("[data-team-detail]")?.closest("div.flex.min-h-0.flex-col");
-    if (!body) return false;
-    return body.getBoundingClientRect().height < 8; // collapsed
-  }),
-  "mobile: sheet collapses to the summary bar",
-);
 await page.screenshot({ path: "demo-mobile-team-collapsed.png" });
+
+// tap the bar to expand
+await tapBar();
+await wait(500);
+check((await bodyH()) > 40, "mobile: tapping the bar expands the detail");
+await page.screenshot({ path: "demo-mobile-team-expanded.png" });
+
+// persistence: click a different team — it STAYS open (kept open across teams)
+await store(() => window.__networkStore.getState().focusTeam("atlas"));
+await wait(400);
+check((await bodyH()) > 40, "mobile: sheet stays open across team clicks");
+
+// collapse, then click another team — it STAYS closed (kept closed across teams)
+await tapBar();
+await wait(400);
+await store(() => window.__networkStore.getState().focusTeam("halo"));
+await wait(400);
+check((await bodyH()) < 8, "mobile: sheet stays closed across team clicks");
 
 console.log("ERRORS:", errors.length ? "\n" + errors.join("\n") : "none");
 await browser.close();

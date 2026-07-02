@@ -55,8 +55,15 @@ body {
   background: rgba(103, 232, 249, 0.28);
 }
 
-/* Keyboard focus that matches the accent without boxing every pointer click. */
-:focus-visible {
+/* Keyboard focus that matches the accent — scoped to interactive controls ONLY, so a container
+   the browser hands focus to (e.g. after a view swap) never draws a big rectangular ring. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
   outline: 2px solid rgba(103, 232, 249, 0.55);
   outline-offset: 2px;
 }

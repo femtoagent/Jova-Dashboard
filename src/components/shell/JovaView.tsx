@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useChatPrefs } from "@/lib/settings/useChatPrefs";
 import { stripAudioTags } from "@/lib/jova/speechText";
@@ -24,13 +24,25 @@ export function JovaView() {
   const chatOpen = useJovaStore((s) => s.chatOpen);
   const setChatOpen = useJovaStore((s) => s.setChatOpen);
   const totalUnread = useJovaStore((s) => Object.values(s.unread).reduce((a, b) => a + b, 0));
+  // press-and-release must BOTH land on the backdrop to count as a click-off (so a drag that
+  // starts inside the panel and ends outside doesn't dismiss it)
+  const scrimDown = useRef(false);
 
   return (
     <div data-view="jova" className="relative h-full w-full overflow-hidden bg-void">
       <StageBackdrop />
 
       {chatOpen ? (
-        <div className="absolute inset-0 flex justify-center animate-[fade_300ms_ease] sm:p-5">
+        <div
+          className="absolute inset-0 flex justify-center animate-[fade_300ms_ease] sm:p-5"
+          onMouseDown={(e) => {
+            scrimDown.current = e.target === e.currentTarget;
+          }}
+          onMouseUp={(e) => {
+            if (scrimDown.current && e.target === e.currentTarget) setChatOpen(false);
+            scrimDown.current = false;
+          }}
+        >
           <div className="flex h-full w-full max-w-[960px] flex-col overflow-hidden border-line bg-panel/90 backdrop-blur-sm sm:rounded-2xl sm:border">
             <ConversationPane onMinimize={() => setChatOpen(false)} />
           </div>

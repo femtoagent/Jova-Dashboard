@@ -12,6 +12,9 @@ import { ConversationPane } from "./ConversationPane";
 import { StageAudio } from "@/components/stage/StageAudio";
 import { CaretDown, CaretUp, Cloud, SpeakerHigh, SpeakerSlash, X } from "@phosphor-icons/react";
 
+/** localStorage key: the mobile network sheet's expanded/collapsed preference. */
+const SHEET_KEY = "jova.networkSheetOpen";
+
 /**
  * The Network view: the constellation map is the hero, and EVERYTHING contextual lives in a
  * docked sidebar that is part of the layout — network roll-up, team detail, agent detail,
@@ -31,16 +34,24 @@ export function NetworkView() {
   const soundOn = useJovaStore((s) => s.soundOn);
   const setSoundOn = useJovaStore((s) => s.setSoundOn);
   const [dreamsOpen, setDreamsOpen] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(true); // mobile bottom-sheet expanded?
+  // The mobile bottom-sheet is a saved preference: collapsed by default, and it STAYS however you
+  // last left it as you click around teams (never auto-toggled). Persisted across reloads.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(SHEET_KEY) === "1") setSheetOpen(true);
+    } catch {}
+  }, []);
+  const writeSheet = (open: boolean) => {
+    setSheetOpen(open);
+    try {
+      localStorage.setItem(SHEET_KEY, open ? "1" : "0");
+    } catch {}
+  };
 
   const totals = rollup(teams, metricsWindow);
   const net = netOf(totals);
   const selectedAgent = focusedTeam && selectedAgentId ? focusedTeam.agents.find((a) => a.id === selectedAgentId) ?? null : null;
-
-  // tapping a team (or drilling into an agent) on mobile expands the sheet to show its detail
-  useEffect(() => {
-    if (focusedTeam) setSheetOpen(true);
-  }, [focusedTeam?.id, selectedAgentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // what the collapsed mobile bar shows — the key stat for whatever's in focus
   const summary = (() => {
@@ -81,7 +92,7 @@ export function NetworkView() {
             onClick={() => {
               const next = !dreamsOpen;
               setDreamsOpen(next);
-              if (next) setSheetOpen(true);
+              if (next) writeSheet(true); // opening Dreams is an explicit "show me" — reveal + remember
               if (chatOpen) setChatOpen(false);
             }}
             title="Dreams — daily improvement ideas from the PMs and Nexus"
@@ -120,7 +131,7 @@ export function NetworkView() {
           >
             {/* mobile summary / toggle bar — always visible; hidden on desktop */}
             <button
-              onClick={() => setSheetOpen((v) => !v)}
+              onClick={() => writeSheet(!sheetOpen)}
               aria-expanded={sheetOpen}
               className={`flex shrink-0 items-center gap-2.5 px-4 py-3 text-left sm:hidden ${sheetOpen ? "border-b border-line" : ""}`}
             >
