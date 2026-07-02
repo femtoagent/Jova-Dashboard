@@ -143,7 +143,12 @@ export function ConversationPane({ onMinimize, compact = false }: { onMinimize?:
           )}
           {!isJova && activeId && (
             <button
-              onClick={() => closeSession(activeId)}
+              onClick={() => {
+                closeSession(activeId);
+                // in the docked (network) pane, closing returns to the Network panel rather than
+                // falling back to Jova's thread in the sidebar
+                if (compact) onMinimize?.();
+              }}
               title="Close this chat"
               className="grid h-8 w-8 place-items-center rounded-lg text-faint transition hover:bg-raise hover:text-rose-300"
             >
@@ -153,7 +158,7 @@ export function ConversationPane({ onMinimize, compact = false }: { onMinimize?:
           {onMinimize && (
             <button
               onClick={onMinimize}
-              title="Back to the stage"
+              title={compact ? "Back to the network" : "Back to the stage"}
               className="grid h-8 w-8 place-items-center rounded-lg text-faint transition hover:bg-raise hover:text-mist"
             >
               <CornersIn size={15} weight="bold" />

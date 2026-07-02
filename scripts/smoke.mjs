@@ -149,6 +149,18 @@ await page.screenshot({ path: "demo-network-talk.png" });
 await store(() => window.__jovaStore.getState().setChatOpen(false));
 await store(() => window.__networkStore.getState().focusTeam(null));
 
+// closing a Nexus chat returns to the Network panel — NOT to Jova
+await wait(300);
+check(await clickByText("Talk to Nexus"), "Talk to Nexus opens a chat");
+await wait(500);
+check(await store(() => !!document.querySelector("[data-network-sidebar] [data-conversation]")), "Nexus chat docks in the sidebar");
+check(await clickByTitle("Close this chat"), "Nexus chat close button clickable");
+await wait(500);
+check(
+  await store(() => window.__jovaStore.getState().chatOpen === false && !document.querySelector("[data-conversation]")),
+  "closing Nexus returns to the Network panel (not Jova)",
+);
+
 // dreams feed in the sidebar
 await clickByTitle("Dreams");
 await wait(400);

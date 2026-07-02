@@ -43,14 +43,17 @@ export function JovaView() {
             scrimDown.current = false;
           }}
         >
-          <div className="flex h-full w-full max-w-[960px] flex-col overflow-hidden border-line bg-panel/90 backdrop-blur-sm sm:rounded-2xl sm:border">
+          {/* solid surface (no backdrop-filter) so tearing it down on close can't flash a
+              compositor artifact over the stage during the fade */}
+          <div className="flex h-full w-full max-w-[960px] flex-col overflow-hidden border-line bg-panel sm:rounded-2xl sm:border">
             <ConversationPane onMinimize={() => setChatOpen(false)} />
           </div>
         </div>
       ) : (
         <div className="group absolute inset-0 animate-[fade_300ms_ease]">
-          {/* she dims and steps back while you're typing in the stage composer */}
-          <div className="absolute inset-x-0 top-0 bottom-40 grid place-items-center transition-all duration-500 group-has-[textarea:focus]:scale-90 group-has-[textarea:focus]:opacity-25">
+          {/* she dims and steps back while you're typing in the stage composer.
+              transition only transform+opacity (never `all`, which can flash other properties) */}
+          <div className="absolute inset-x-0 top-0 bottom-40 grid place-items-center transition-[transform,opacity] duration-500 group-has-[textarea:focus]:scale-90 group-has-[textarea:focus]:opacity-25">
             <JovaPresence />
           </div>
 

@@ -55,8 +55,12 @@ body {
   background: rgba(103, 232, 249, 0.28);
 }
 
-/* Keyboard focus that matches the accent — scoped to interactive controls ONLY, so a container
-   the browser hands focus to (e.g. after a view swap) never draws a big rectangular ring. */
+/* Reset ALL focus outlines first — so a container the browser hands focus to during a view swap
+   (a scroll region, the body, a wrapper) can NEVER flash a rectangular ring. */
+:focus {
+  outline: none;
+}
+/* …then re-add the accent ring for interactive controls on keyboard focus only. */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
