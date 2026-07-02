@@ -1,6 +1,7 @@
 "use client";
 
 import { useSettingsStore, type SettingsScreen } from "@/lib/settings/useSettingsStore";
+import { GearSix } from "@phosphor-icons/react";
 
 /**
  * Opens the Settings/Admin overlay. Sits in the top-right. `to` picks which screen it opens to
@@ -12,9 +13,9 @@ export function SettingsGear({ to = "teams", title = "Settings" }: { to?: Settin
     <button
       onClick={() => openSettings(to)}
       title={title}
-      className="fixed right-4 top-4 z-40 flex h-11 w-12 items-center justify-center rounded-2xl border border-white/10 bg-black/40 text-lg text-white/70 backdrop-blur-md transition hover:bg-white/10 hover:text-white/90"
+      className="fixed right-4 top-[max(1rem,env(safe-area-inset-top))] z-40 flex h-11 w-12 items-center justify-center rounded-2xl border border-white/10 bg-black/40 text-white/70 backdrop-blur-md transition hover:bg-white/10 hover:text-white/90"
     >
-      ⚙
+      <GearSix size={19} weight="bold" />
     </button>
   );
 }

@@ -13,15 +13,19 @@ import { DreamerPane } from "@/components/network/DreamerPane";
 import { SettingsGear } from "@/components/settings/SettingsGear";
 import { SettingsOverlay } from "@/components/settings/SettingsOverlay";
 import { WorldToggle } from "@/components/WorldToggle";
+import { ViewToggle } from "@/components/ViewToggle";
+import { DefaultStage } from "@/components/stage/DefaultStage";
 import { DocPanel } from "@/components/docs/DocPanel";
 import { VoiceLayer } from "@/components/voice/VoiceLayer";
 import { useVoicePrefs } from "@/lib/settings/useVoicePrefs";
 import { useVoiceStatus } from "@/lib/settings/useVoiceStatus";
 import { useAgentVoices } from "@/lib/settings/useAgentVoices";
 import { useLogStore } from "@/lib/logs/useLogStore";
+import { useActivityDriver } from "@/lib/network/useActivityDriver";
 import { setOnVoiceUnavailable } from "@/lib/audio/tts";
 
-// 3D world is client-only.
+// The 3D world is client-only AND opt-in: this dynamic import only evaluates when the 3D view
+// is actually rendered, so the Default view never downloads Three.js at all.
 const SceneCanvas = dynamic(() => import("@/components/scene/SceneCanvas"), { ssr: false });
 
 export function CommandCenter() {
@@ -29,16 +33,22 @@ export function CommandCenter() {
   const greeted = useRef(false);
   const wispState = useJovaStore((s) => s.wispState);
   const fullMode = useJovaStore((s) => s.fullMode);
+  const viewMode = useJovaStore((s) => s.viewMode);
   const sessionCount = useJovaStore((s) => s.sessions.length);
   const createSession = useJovaStore((s) => s.createSession);
   const hydrateJovaStyle = useJovaStore((s) => s.hydrateJovaStyle);
+  const hydrateViewMode = useJovaStore((s) => s.hydrateViewMode);
   const hydrateVoicePrefs = useVoicePrefs((s) => s.hydrate);
   const hydrateAgentVoices = useAgentVoices((s) => s.hydrate);
   const refreshVoiceStatus = useVoiceStatus((s) => s.refreshAll);
 
+  // The mock network simulation (tasks / approvals / logs / nexusActive) — renderer-independent.
+  useActivityDriver(fullMode);
+
   // Apply saved client-only preferences once after mount (localStorage isn't available during SSR).
   useEffect(() => {
     hydrateJovaStyle();
+    hydrateViewMode();
     hydrateVoicePrefs();
     hydrateAgentVoices();
     // voiceOn isn't persisted (it's the in-session quick-mute), so re-derive it from Jova's persisted
@@ -59,7 +69,7 @@ export function CommandCenter() {
       }
     });
     return () => setOnVoiceUnavailable(null);
-  }, [hydrateJovaStyle, hydrateVoicePrefs, hydrateAgentVoices, refreshVoiceStatus]);
+  }, [hydrateJovaStyle, hydrateViewMode, hydrateVoicePrefs, hydrateAgentVoices, refreshVoiceStatus]);
 
   // Ensure a session exists.
   useEffect(() => {
@@ -78,9 +88,12 @@ export function CommandCenter() {
     <AuthGate>
       <main className="relative h-dvh w-screen overflow-hidden bg-[#04070a] text-white">
         <div className="absolute inset-0">
-          <SceneCanvas />
+          {viewMode === "3d" ? <SceneCanvas /> : <DefaultStage />}
         </div>
-        <WorldToggle />
+        <div className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-20 flex -translate-x-1/2 items-center gap-2">
+          <WorldToggle />
+          <ViewToggle />
+        </div>
         <DemoControls />
         {fullMode && <NexusInfoPanel />}
         {fullMode && <DreamerPane />}

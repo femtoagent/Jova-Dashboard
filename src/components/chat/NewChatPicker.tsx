@@ -79,7 +79,7 @@ export function NewChatPicker({ onClose }: { onClose: () => void }) {
   const pickJova = () => { openJovaChat(); onClose(); };
 
   return (
-    <div className="flex w-[150px] shrink-0 flex-col border-r border-white/10 sm:w-[200px]">
+    <div className="flex w-[210px] shrink-0 flex-col border-r border-white/10 sm:w-[200px]">
       <div className="flex items-center gap-1 border-b border-white/10 px-2 py-2">
         <button onClick={onClose} title="Back" className="rounded px-1 text-[12px] text-white/50 transition hover:bg-white/10 hover:text-white/80">
           ‹

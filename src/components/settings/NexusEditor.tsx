@@ -11,6 +11,17 @@ const SKINS: { key: NexusStyle; label: string; desc: string }[] = [
   { key: "vortex", label: "Vortex", desc: "Counter-rotating woven torus-knots" },
 ];
 
+/** Notes that the procedural skins render in the 3D scene only. */
+function NexusSkinHint() {
+  const viewMode = useJovaStore((s) => s.viewMode);
+  if (viewMode === "3d") return null;
+  return (
+    <p className="mb-1.5 text-[11px] text-white/35">
+      These skins render in the 3D scene — switch the view (Settings → Jova) to see them.
+    </p>
+  );
+}
+
 /** Nexus's edit panel — pick her skin (and talk to her). */
 export function NexusEditor() {
   const nexusStyle = useJovaStore((s) => s.nexusStyle);
@@ -34,7 +45,8 @@ export function NexusEditor() {
         💬 Talk to Nexus
       </button>
 
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-white/40">Skin</div>
+      <div className="mb-1 text-[10px] uppercase tracking-wider text-white/40">Skin · 3D view</div>
+      <NexusSkinHint />
       <div className="grid gap-1.5 sm:grid-cols-2">
         {SKINS.map((s) => {
           const active = nexusStyle === s.key;

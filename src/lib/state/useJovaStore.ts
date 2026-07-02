@@ -39,6 +39,14 @@ const JOVA_STYLES: JovaStyle[] = [
   "mycelium", "glyph", "medusa", "cocoon", "resonance", "mothership", "corona", "plasma", "singularity",
 ];
 
+/**
+ * Which renderer draws the stage. "default" is the light 2D view (CSS/SVG — works everywhere,
+ * easy on older devices); "3d" is the original WebGL scene. Persisted; the 3D bundle only
+ * loads when "3d" is chosen.
+ */
+export type ViewMode = "default" | "3d";
+const VIEW_MODE_KEY = "jova.viewMode";
+
 interface JovaState {
   // ---- scene ----
   wispType: WispType;
@@ -55,6 +63,8 @@ interface JovaState {
   nexusStyle: NexusStyle;
   /** which hero form Jova takes on the "just Jova" screen */
   jovaStyle: JovaStyle;
+  /** which renderer draws the stage — the light 2D default or the original 3D scene */
+  viewMode: ViewMode;
 
   // ---- chat ----
   sessions: ChatSession[];
@@ -89,8 +99,11 @@ interface JovaState {
   toggleFullMode: () => void;
   setNexusStyle: (s: NexusStyle) => void;
   setJovaStyle: (s: JovaStyle) => void;
+  setViewMode: (m: ViewMode) => void;
   /** Apply the persisted Jova-view preference (call once on the client after mount). */
   hydrateJovaStyle: () => void;
+  /** Apply the persisted renderer choice (call once on the client after mount). */
+  hydrateViewMode: () => void;
 
   // ---- chat actions ----
   createSession: (title?: string, target?: ChatTarget) => string;
@@ -180,6 +193,7 @@ export const useJovaStore = create<JovaState>((set, get) => ({
   fullMode: false,
   nexusStyle: "brain",
   jovaStyle: "mycelium",
+  viewMode: "default",
 
   sessions: [],
   activeSessionId: null,
@@ -218,6 +232,19 @@ export const useJovaStore = create<JovaState>((set, get) => ({
     try {
       const v = window.localStorage.getItem(JOVA_STYLE_KEY);
       if (v && (JOVA_STYLES as string[]).includes(v)) set({ jovaStyle: v as JovaStyle });
+    } catch {}
+  },
+  setViewMode: (m) => {
+    if (typeof window !== "undefined") {
+      try { window.localStorage.setItem(VIEW_MODE_KEY, m); } catch {}
+    }
+    set({ viewMode: m });
+  },
+  hydrateViewMode: () => {
+    if (typeof window === "undefined") return;
+    try {
+      const v = window.localStorage.getItem(VIEW_MODE_KEY);
+      if (v === "default" || v === "3d") set({ viewMode: v });
     } catch {}
   },
 

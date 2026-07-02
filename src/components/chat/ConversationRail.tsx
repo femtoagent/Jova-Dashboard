@@ -70,7 +70,7 @@ export function ConversationRail() {
   if (mode === "picker") return <NewChatPicker onClose={() => setMode("conversations")} />;
 
   return (
-    <div className="flex w-[150px] shrink-0 flex-col border-r border-white/10 sm:w-[200px]">
+    <div className="flex w-[210px] shrink-0 flex-col border-r border-white/10 sm:w-[200px]">
       <div className="flex items-center justify-between border-b border-white/10 py-2 pl-3 pr-2">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Conversations</span>
         <button
@@ -122,7 +122,7 @@ export function ConversationRail() {
                   <button
                     onClick={() => closeConversation(t.teamId, t.agentId)}
                     title="Close conversation"
-                    className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded px-1 text-[12px] leading-none text-white/40 transition hover:text-rose-300 group-hover:block"
+                    className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded px-1 text-[12px] leading-none text-white/40 transition hover:text-rose-300 group-hover:block [@media(hover:none)]:block"
                   >
                     ×
                   </button>

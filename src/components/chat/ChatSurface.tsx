@@ -11,6 +11,7 @@ import { characterByName } from "@/lib/agents/characters";
 import { MessageList } from "./MessageList";
 import { Composer, fileToDataUrl, MAX_ATTACH_BYTES } from "./Composer";
 import { ConversationRail } from "./ConversationRail";
+import { CaretDown, ChatCircle, List, Microphone, SpeakerHigh, X } from "@phosphor-icons/react";
 
 const DEFAULT_H = 440;
 const MIN_H = 260;
@@ -122,9 +123,9 @@ export function ChatSurface() {
     return (
       <button
         onClick={() => setChatOpen(true)}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full border border-cyan-300/30 bg-cyan-400/10 px-5 py-2.5 text-sm text-cyan-50 backdrop-blur-md transition hover:bg-cyan-400/20"
+        className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-400/10 px-5 py-2.5 text-sm text-cyan-50 backdrop-blur-md transition hover:bg-cyan-400/20"
       >
-        💬 Chat
+        <ChatCircle size={16} weight="bold" /> Chat
         {totalUnread > 0 && (
           <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-cyan-400 px-1 text-[10px] font-semibold text-black shadow-[0_0_8px_#67e8f9]">
             {totalUnread}
@@ -138,15 +139,27 @@ export function ChatSurface() {
     <div
       data-chat-pane
       style={{ height }}
-      className="fixed bottom-5 left-1/2 flex w-[min(760px,96vw)] max-h-[90vh] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-[0_0_60px_rgba(0,180,255,0.08)] backdrop-blur-xl animate-[fadein_400ms_ease]"
+      className="fixed bottom-2 left-1/2 flex w-[min(760px,calc(100vw-16px))] max-h-[92dvh] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40 pb-[env(safe-area-inset-bottom)] shadow-[0_0_60px_rgba(0,180,255,0.08)] backdrop-blur-xl animate-[fadein_400ms_ease] sm:bottom-5 sm:w-[min(760px,96vw)]"
     >
       {/* drag-to-resize handle (vertical only) */}
-      <div onPointerDown={onHandleDown} className="group flex h-3 shrink-0 cursor-ns-resize touch-none items-center justify-center" title="Drag to resize">
+      <div onPointerDown={onHandleDown} className="group flex h-4 shrink-0 cursor-ns-resize touch-none items-center justify-center sm:h-3" title="Drag to resize">
         <div className="h-1 w-10 rounded-full bg-white/15 transition group-hover:bg-white/35" />
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        {railOpen && <ConversationRail />}
+      <div className="relative flex min-h-0 flex-1">
+        {/* on phones the rail is an overlay drawer so it never squeezes the thread */}
+        {railOpen && (
+          <>
+            <button
+              aria-label="Close conversations"
+              onClick={() => setRailOpen(false)}
+              className="absolute inset-0 z-10 bg-black/50 sm:hidden"
+            />
+            <div className="absolute inset-y-0 left-0 z-20 flex bg-[#070d14]/95 shadow-[8px_0_30px_rgba(0,0,0,0.45)] sm:static sm:z-auto sm:bg-transparent sm:shadow-none">
+              <ConversationRail />
+            </div>
+          </>
+        )}
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
@@ -154,9 +167,9 @@ export function ChatSurface() {
               <button
                 onClick={() => setRailOpen((v) => !v)}
                 title={railOpen ? "Hide conversations" : "Show conversations"}
-                className="shrink-0 rounded-lg px-1.5 py-1 text-white/45 transition hover:bg-white/10 hover:text-white/80"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-white/80"
               >
-                ☰
+                <List size={16} weight="bold" />
               </button>
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accent, boxShadow: `0 0 6px ${accent}` }} />
               {editableAgent ? (
@@ -191,10 +204,10 @@ export function ChatSurface() {
                     hint="Listen continuously and auto-send each utterance"
                     pulse={micOn && listening}
                   >
-                    🎤
+                    <Microphone size={15} weight="bold" />
                   </IconToggle>
                   <IconToggle on={voiceOn} onClick={toggleSpeaker} label="Voice" hint="Jova speaks her replies aloud">
-                    🔊
+                    <SpeakerHigh size={15} weight="bold" />
                   </IconToggle>
                 </>
               )}
@@ -207,10 +220,10 @@ export function ChatSurface() {
                     hint={`Talk to ${target.teamName} by voice — listens and auto-sends`}
                     pulse={micOn && listening}
                   >
-                    🎤
+                    <Microphone size={15} weight="bold" />
                   </IconToggle>
                   <IconToggle on={charSpeakOn} onClick={toggleCharSpeak} label="Voice" hint={`${target.teamName} speaks replies aloud`}>
-                    🔊
+                    <SpeakerHigh size={15} weight="bold" />
                   </IconToggle>
                 </>
               )}
@@ -218,17 +231,17 @@ export function ChatSurface() {
                 <button
                   onClick={() => closeSession(activeId)}
                   title="Close this chat"
-                  className="rounded-lg px-2 py-1 text-white/45 transition hover:bg-white/10 hover:text-rose-300"
+                  className="grid h-8 w-8 place-items-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-rose-300"
                 >
-                  ✕
+                  <X size={15} weight="bold" />
                 </button>
               )}
               <button
                 onClick={() => setChatOpen(false)}
                 title="Hide"
-                className="rounded-lg px-2 py-1 text-white/50 transition hover:bg-white/10 hover:text-white/80"
+                className="grid h-8 w-8 place-items-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white/80"
               >
-                ▾
+                <CaretDown size={15} weight="bold" />
               </button>
             </div>
           </div>
@@ -277,7 +290,7 @@ function IconToggle({
     <button
       onClick={onClick}
       title={`${label} — ${hint}`}
-      className={`rounded-lg px-2 py-1 text-sm transition ${pulse ? "animate-pulse" : ""} ${
+      className={`grid h-8 w-8 place-items-center rounded-lg transition ${pulse ? "animate-pulse" : ""} ${
         on ? "border border-cyan-300/30 bg-cyan-400/25 text-cyan-50" : "border border-transparent text-white/45 hover:bg-white/10"
       }`}
     >

@@ -12,13 +12,16 @@ const MIN_W = 360;
 function initialWidth(): number {
   if (typeof window === "undefined") return 560;
   const saved = Number(window.localStorage.getItem(WIDTH_KEY));
-  if (saved && saved >= MIN_W) return Math.min(saved, window.innerWidth - 80);
-  return Math.round(Math.min(window.innerWidth * 0.5, 680));
+  if (saved && saved >= 200) return clampWidth(saved);
+  return clampWidth(Math.round(Math.min(window.innerWidth * 0.5, 680)));
 }
 
 function clampWidth(w: number): number {
-  const max = typeof window !== "undefined" ? window.innerWidth - 80 : 1400;
-  return Math.max(MIN_W, Math.min(w, Math.max(MIN_W, max)));
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1400;
+  // on phones narrower than MIN_W + margin, the viewport (minus a sliver) wins over MIN_W
+  const min = Math.min(MIN_W, vw - 16);
+  const max = Math.max(min, vw - 80);
+  return Math.max(min, Math.min(w, max));
 }
 
 /**

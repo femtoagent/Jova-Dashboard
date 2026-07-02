@@ -32,6 +32,9 @@ page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 await page.goto(URL, { waitUntil: "networkidle2", timeout: 45000 });
+// the app boots in the light Default (2D) view — the hero forms live in the 3D scene, so opt in
+await page.waitForFunction(() => !!window.__jovaStore, { timeout: 20000 });
+await page.evaluate(() => window.__jovaStore.getState().setViewMode("3d"));
 await page.waitForSelector("canvas", { timeout: 20000 });
 const info = await page.evaluate(() => {
   const c = document.querySelector("canvas");

@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useConversation } from "@/lib/conversation/useConversation";
 import { useVoice } from "@/lib/conversation/useVoice";
+import { File, Microphone, Paperclip, PaperPlaneRight } from "@phosphor-icons/react";
 
 /** Per-file attachment cap — base64 inflates ~33%, so this keeps a 5-file turn to a sane POST size. */
 export const MAX_ATTACH_BYTES = 8 * 1024 * 1024;
@@ -112,7 +113,7 @@ export function Composer() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={a.dataUrl} alt={a.name} className="h-10 w-10 rounded object-cover" />
               ) : (
-                <span className="px-1 text-base">📄</span>
+                <File size={18} className="mx-1 text-white/60" />
               )}
               <span className="max-w-[140px] truncate text-[11px] text-white/60">{a.kind === "image" ? "image" : a.name}</span>
               <button onClick={() => removePendingAttachment(i)} title="Remove" className="text-white/40 transition hover:text-rose-300">
@@ -128,9 +129,9 @@ export function Composer() {
           onClick={() => fileRef.current?.click()}
           disabled={full}
           title={full ? "Up to 5 attachments" : "Attach images or files (up to 5, or drag them onto the chat)"}
-          className="h-[44px] shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 text-lg text-white/60 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+          className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/60 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          📎
+          <Paperclip size={18} />
         </button>
         <input ref={fileRef} type="file" multiple className="hidden" onChange={onPick} />
         <textarea
@@ -146,7 +147,8 @@ export function Composer() {
           }}
           rows={1}
           placeholder={micOn ? "Hands-free on — just talk, or type" : target ? `Message ${target.teamName}'s ${target.label}…` : "Talk to Jova…"}
-          className="min-h-[44px] flex-1 resize-none overflow-y-auto rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-[15px] text-white outline-none placeholder:text-white/35 focus:border-cyan-300/40 focus:bg-white/[0.07]"
+          // 16px on touch screens — anything smaller makes iOS zoom the page on focus
+          className="min-h-[44px] flex-1 resize-none overflow-y-auto rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-[16px] text-white outline-none placeholder:text-white/35 focus:border-cyan-300/40 focus:bg-white/[0.07] sm:text-[15px]"
         />
         {isJova && (
           <button
@@ -159,20 +161,22 @@ export function Composer() {
             onPointerCancel={() => void pttEnd()}
             disabled={micOn}
             title={micOn ? "Hands-free mic is on" : "Hold to talk"}
-            className={`h-[44px] shrink-0 select-none rounded-xl border px-3 text-lg transition disabled:cursor-not-allowed disabled:opacity-40 ${
+            className={`grid h-[44px] w-[44px] shrink-0 select-none place-items-center rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-40 ${
               listening && !micOn
                 ? "border-cyan-300/50 bg-cyan-400/30 text-cyan-50 animate-pulse"
                 : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
             }`}
           >
-            🎙
+            <Microphone size={18} />
           </button>
         )}
         <button
           onClick={submit}
-          className="h-[44px] shrink-0 rounded-xl border border-cyan-300/30 bg-cyan-400/20 px-4 text-sm font-medium text-cyan-50 transition hover:bg-cyan-400/30"
+          title="Send"
+          className="flex h-[44px] shrink-0 items-center gap-1.5 rounded-xl border border-cyan-300/30 bg-cyan-400/20 px-3.5 text-sm font-medium text-cyan-50 transition hover:bg-cyan-400/30"
         >
-          Send
+          <PaperPlaneRight size={16} weight="bold" />
+          <span className="hidden sm:inline">Send</span>
         </button>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { useJovaStore } from "@/lib/state/useJovaStore";
 import { useHistoryStore } from "@/lib/logs/useHistoryStore";
 import type { Dream } from "@/lib/network/types";
 import { NEXUS_CHAT_TARGET } from "@/lib/jova/types";
+import { Cloud } from "@phosphor-icons/react";
 
 /**
  * The Dreamer's pane, decluttered to a small "dream cloud" in the top-right: it glows + shows a count
@@ -57,7 +58,7 @@ export function DreamerPane() {
   };
 
   return (
-    <div className="fixed right-4 top-20 z-10 flex flex-col items-end gap-2">
+    <div className="fixed right-4 top-[calc(max(1rem,env(safe-area-inset-top))+4rem)] z-10 flex flex-col items-end gap-2">
       {/* the dream cloud — glows + counts when there are dreams; click to open the feed */}
       <button
         onClick={() => setOpen((o) => !o)}
@@ -66,9 +67,12 @@ export function DreamerPane() {
           active ? "border-violet-300/40 bg-violet-400/15 hover:bg-violet-400/25" : "border-white/10 bg-black/40 hover:bg-white/10"
         }`}
       >
-        <span className={`text-xl leading-none ${active ? "animate-pulse" : "opacity-50"}`} style={active ? { filter: "drop-shadow(0 0 6px #c9a8ff)" } : undefined}>
-          ☁
-        </span>
+        <Cloud
+          size={20}
+          weight={active ? "fill" : "regular"}
+          className={`${active ? "animate-pulse text-violet-200" : "opacity-50"}`}
+          style={active ? { filter: "drop-shadow(0 0 6px #c9a8ff)" } : undefined}
+        />
         {count > 0 && (
           <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-violet-400 px-1 text-[10px] font-semibold text-white shadow-[0_0_8px_#c9a8ff]">
             {count}

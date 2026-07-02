@@ -8,6 +8,7 @@ import { useVoice } from "@/lib/conversation/useVoice";
 import { getInputLevel } from "@/lib/audio/stt";
 import { InlineMd } from "@/lib/markdown";
 import { stripAudioTags } from "@/lib/jova/speechText";
+import { Microphone } from "@phosphor-icons/react";
 
 /**
  * The ambient voice surface — how you talk to Jova with the chat closed. Mounted over the scene
@@ -112,12 +113,12 @@ function VoiceOrb({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       title={micOn ? "Stop listening" : "Talk to Jova"}
-      className={`fixed bottom-6 left-6 z-30 grid h-14 w-14 place-items-center rounded-full border backdrop-blur-md transition ${
+      className={`fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-4 z-30 grid h-14 w-14 place-items-center rounded-full border backdrop-blur-md transition sm:left-6 ${
         micOn ? "border-cyan-300/50 bg-cyan-400/25 text-cyan-50 shadow-[0_0_24px_rgba(34,211,238,0.4)]" : "border-white/15 bg-black/40 text-white/70 hover:bg-white/10"
       }`}
     >
       {listening && <span className="absolute inset-0 grid place-items-center"><MicRing size={56} /></span>}
-      <span className="relative text-xl">🎙</span>
+      <Microphone size={22} weight="bold" className="relative" />
     </button>
   );
 }

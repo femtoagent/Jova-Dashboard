@@ -40,6 +40,8 @@ agent-versions.local.json
 
 # smoke-test screenshots
 demo-*.png
+form-*.png
+full-corner.png
 
 # editor
 .vscode/*

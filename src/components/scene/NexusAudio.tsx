@@ -4,15 +4,10 @@ import * as THREE from "three";
 import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import { useJovaStore } from "@/lib/state/useJovaStore";
+import { NEXUS_MASTER, loadNexusBuffer, startNexusLoop, stopNexusLoop } from "@/lib/audio/nexusLoop";
 
 // Nexus core world position (matches SceneCanvas: NEXUS_POS [0,-3,-22] + scale 3 * model core y≈3.03)
 const CORE: [number, number, number] = [0, 6, -22];
-const MASTER = 0.8; // overall volume when sound is on
-const URL = "/audio/nexus-bass.wav";
-// loop the loud, growling region of the reference (~first 1.9s); the rest is a long quiet decay tail
-const LOOP_START = 1.05;
-const LOOP_END = 2.1;
-const XF = 0.08; // crossfade (seconds) baked into the loop seam so it doesn't pop
 
 interface Graph {
   ctx: AudioContext;
@@ -35,34 +30,11 @@ function setPannerPos(p: PannerNode, x: number, y: number, z: number) {
 }
 
 /**
- * Make the loop seam seamless: equal-power crossfade the loop's tail [loopEnd-XF, loopEnd) with the
- * material just before loopStart, so when it wraps loopEnd -> loopStart the waveform is continuous
- * (no step = no pop). Mutates the buffer in place.
- */
-function crossfadeLoop(buffer: AudioBuffer, loopStart: number, loopEnd: number, xf: number) {
-  const sr = buffer.sampleRate;
-  const a = Math.floor(loopStart * sr);
-  const b = Math.floor(loopEnd * sr);
-  const n = Math.min(Math.floor(xf * sr), a, b - a);
-  if (n <= 0) return;
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    const d = buffer.getChannelData(ch);
-    for (let k = 0; k < n; k++) {
-      const x = (k / n) * (Math.PI / 2);
-      const fadeOut = Math.cos(x); // 1 -> 0
-      const fadeIn = Math.sin(x); // 0 -> 1
-      const tail = b - n + k;
-      const lead = a - n + k;
-      d[tail] = d[tail] * fadeOut + d[lead] * fadeIn;
-    }
-  }
-}
-
-/**
- * Nexus's voice. SILENT at rest — nothing plays. When she activates (and sound is on), the actual
- * reference bass (public/audio/nexus-bass.wav) plays through a positional panner: the full hard hit on
- * the activation edge, then looping its loud growling region so it sustains while she processes, fading
- * out when she settles. Gated by soundOn (autoplay needs a user gesture — the Sound toggle).
+ * Nexus's voice in the 3D scene. SILENT at rest — nothing plays. When she activates (and sound is
+ * on), the reference bass (shared loop in lib/audio/nexusLoop) plays through a positional panner:
+ * the full hard hit on the activation edge, then looping its loud growling region while she
+ * processes, fading out when she settles. Gated by soundOn (autoplay needs a user gesture — the
+ * Sound toggle).
  */
 export function NexusAudio() {
   const camera = useThree((s) => s.camera);
@@ -74,7 +46,7 @@ export function NexusAudio() {
     if (!AC) return;
     const ctx = new AC();
     const master = ctx.createGain();
-    master.gain.value = MASTER;
+    master.gain.value = NEXUS_MASTER;
     master.connect(ctx.destination);
     const pan = ctx.createPanner();
     pan.panningModel = "equalpower";
@@ -88,11 +60,9 @@ export function NexusAudio() {
     graph.current = g;
 
     let cancelled = false;
-    fetch(URL)
-      .then((r) => r.arrayBuffer())
-      .then((ab) => ctx.decodeAudioData(ab))
-      .then((buf) => { if (!cancelled) { crossfadeLoop(buf, LOOP_START, LOOP_END, XF); g.buffer = buf; } })
-      .catch(() => {});
+    void loadNexusBuffer(ctx).then((buf) => {
+      if (!cancelled && buf) g.buffer = buf;
+    });
 
     return () => {
       cancelled = true;
@@ -110,26 +80,14 @@ export function NexusAudio() {
     if (s.soundOn && ctx.state === "suspended") void ctx.resume();
 
     const want = s.soundOn && s.nexusActive && !!g.buffer;
-    const now = ctx.currentTime;
 
     if (want && !g.playing) {
-      // start from 0 so the hard attack hits, then loop the loud growl region while held active
-      const src = ctx.createBufferSource();
-      src.buffer = g.buffer;
-      src.loop = true;
-      src.loopStart = LOOP_START;
-      src.loopEnd = LOOP_END;
-      const vg = ctx.createGain();
-      vg.gain.value = 0.0001;
-      src.connect(vg).connect(g.pan);
-      src.start(0, 0);
-      vg.gain.setTargetAtTime(1, now, 0.04);
-      g.src = src;
-      g.vg = vg;
+      const h = startNexusLoop(ctx, g.buffer!, g.pan);
+      g.src = h.src;
+      g.vg = h.vg;
       g.playing = true;
     } else if (!want && g.playing) {
-      g.vg?.gain.setTargetAtTime(0.0001, now, 0.18);
-      try { g.src?.stop(now + 0.7); } catch {}
+      if (g.src && g.vg) stopNexusLoop(ctx, { src: g.src, vg: g.vg });
       g.playing = false;
       g.src = null;
       g.vg = null;

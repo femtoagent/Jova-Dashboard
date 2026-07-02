@@ -24,7 +24,7 @@ export function NexusInfoPanel() {
 
   const totals = rollup(teams, metricsWindow);
   return (
-    <div className="fixed bottom-5 left-4 z-10 max-h-[80vh] w-[min(320px,82vw)] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-white/85 backdrop-blur-xl">
+    <div className="fixed bottom-2 left-2 z-10 max-h-[44dvh] w-[min(320px,calc(100vw-100px))] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-white/85 backdrop-blur-xl sm:bottom-5 sm:left-4 sm:max-h-[80vh] sm:w-[min(320px,82vw)]">
       <div className="mb-3 flex items-center gap-2">
         <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "#9fe8ff", boxShadow: "0 0 10px #9fe8ff" }} />
         <span className="text-sm font-semibold tracking-wide text-cyan-100">Network</span>

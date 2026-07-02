@@ -1,37 +1,12 @@
 "use client";
 
 import * as THREE from "three";
-import { useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useMemo } from "react";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
-import { useJovaStore } from "@/lib/state/useJovaStore";
-import { useLogStore } from "@/lib/logs/useLogStore";
-import type { AgentRole } from "@/lib/network/types";
 import { TeamBrain } from "./TeamBrain";
 import { AgentNode } from "./AgentNode";
 import { Strand } from "./Strand";
 import { Pulses, type PulseCurve } from "./Pulses";
-
-/** Mock "agent thoughts" that occasionally surface for the operator's sign-off. */
-const APPROVAL_THOUGHTS = [
-  "Adopt a caching layer to cut p95 latency",
-  "Split the monolith API into services",
-  "Raise the test-coverage gate to 80%",
-  "Pause the lowest-ROI ad channel",
-  "Rewrite the onboarding flow",
-  "Add a nightly data-integrity job",
-  "Negotiate a volume discount on inference",
-];
-
-/** Flavour text for the mock activity driver (until this is wired to real agent events). */
-const TASK_TITLES: Record<AgentRole, string[]> = {
-  pm: ["Define Q3 roadmap", "Prioritize backlog", "Scope new feature", "Align stakeholders"],
-  developer: ["Refactor auth flow", "Fix payment bug", "Build API endpoint", "Optimize render loop"],
-  qa: ["Write E2E suite", "Triage flaky tests", "Verify release build", "Audit error logs"],
-  devops: ["Provision staging", "Tune autoscaling", "Patch CVE-2026", "Roll out deploy"],
-  marketing: ["Draft launch post", "A/B test landing", "Plan campaign", "Analyze funnel"],
-  cx: ["Clear ticket queue", "Write help article", "Escalate outage", "Survey churned users"],
-};
 
 /** A gently bowed curve between two points (so strands arc like synapses, not laser-straight wires). */
 function arcCurve(a: THREE.Vector3, b: THREE.Vector3, bow: number): THREE.CatmullRomCurve3 {
@@ -56,11 +31,6 @@ export function Network() {
   const selectedAgentId = useNetworkStore((s) => s.selectedAgentId);
   const talkingAgentId = useNetworkStore((s) => s.talkingAgentId);
   const nexusHub = useNetworkStore((s) => s.nexusHub);
-  const startTask = useNetworkStore((s) => s.startTask);
-  const advanceTask = useNetworkStore((s) => s.advanceTask);
-  const completeTask = useNetworkStore((s) => s.completeTask);
-  const addApproval = useNetworkStore((s) => s.addApproval);
-  const setNexusActive = useJovaStore((s) => s.setNexusActive);
 
   const hub = useMemo(() => new THREE.Vector3(...nexusHub), [nexusHub]);
 
@@ -91,43 +61,8 @@ export function Network() {
     return { strands, pulseCurves, agentWorld };
   }, [topoSig, hub]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mock activity driver — starts / advances / completes tasks and occasionally raises an approval.
-  const acc = useRef(0);
-  useFrame((_, dt) => {
-    acc.current += dt;
-    if (acc.current < 1.8) return;
-    acc.current = 0;
-    const c = teams[Math.floor(Math.random() * teams.length)];
-    if (!c) return;
-    const a = c.agents[Math.floor(Math.random() * c.agents.length)];
-    if (!a) return;
-    const log = useLogStore.getState().addLog;
-    const r = Math.random();
-    if (a.tasks.length === 0 || (a.tasks.length < 3 && r < 0.4)) {
-      const pool = TASK_TITLES[a.role] ?? ["Working"];
-      const title = pool[Math.floor(Math.random() * pool.length)] ?? "Working";
-      startTask(c.id, a.id, title);
-      log({ kind: "mesh", source: `${c.name} / ${a.label}`, message: `Started "${title}"` });
-    } else {
-      const t = a.tasks[Math.floor(Math.random() * a.tasks.length)];
-      if (!t) return;
-      if (t.steps >= 5 || Math.random() < 0.25) {
-        completeTask(c.id, a.id, t.id);
-        log({ kind: "mesh", source: `${c.name} / ${a.label}`, message: `Completed "${t.title}"` });
-      } else advanceTask(c.id, a.id, t.id);
-    }
-    if (Math.random() < 0.06) {
-      const ag = c.agents[Math.floor(Math.random() * c.agents.length)];
-      if (ag && c.approvals.length < 3) {
-        // gate on the same cap addApproval enforces, so the log can't show a sign-off that wasn't added
-        const text = APPROVAL_THOUGHTS[Math.floor(Math.random() * APPROVAL_THOUGHTS.length)] ?? "Proposed improvement";
-        addApproval(c.id, ag.id, ag.label, text);
-        log({ kind: "mesh", level: "warn", source: `${c.name} / ${ag.label}`, message: `Needs sign-off: ${text}` });
-      }
-    }
-    const fresh = useNetworkStore.getState().teams;
-    setNexusActive(fresh.some((co) => co.agents.some((ag) => ag.tasks.length > 0)));
-  });
+  // The mock activity driver used to tick here; it now lives in lib/network/useActivityDriver
+  // (mounted by CommandCenter) so the simulation runs whichever renderer draws the network.
 
   return (
     <group>

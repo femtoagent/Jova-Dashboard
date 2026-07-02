@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas,
+    monospace;
+}
+
 :root {
   color-scheme: dark;
 }
@@ -13,10 +20,19 @@ body {
   margin: 0;
   background: #04070a;
   color: #e8f6ff;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
-    sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+}
+
+::selection {
+  background: rgba(103, 232, 249, 0.28);
+}
+
+/* Keyboard focus that matches the accent without boxing every pointer click. */
+:focus-visible {
+  outline: 2px solid rgba(103, 232, 249, 0.55);
+  outline-offset: 2px;
 }
 
 /* Y-only entrance — must NOT translate X. Tailwind v4's `-translate-x-1/2` uses the separate
@@ -67,6 +83,67 @@ body {
   }
 }
 
+/* ---- Default (2D) stage ------------------------------------------------- */
+
+/* Jova's presence at rest: a slow breath. Scale only — cheap on old GPUs. */
+@keyframes presence-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.045);
+  }
+}
+
+/* Expanding ring while she speaks / when a node is talking. */
+@keyframes presence-ripple {
+  from {
+    transform: scale(0.55);
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* The aurora wash behind the default stage — a very slow drift, transform-only. */
+@keyframes aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(-4%, -2%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, 3%, 0) scale(1.08);
+  }
+}
+
+/* Thinking shimmer — a soft rotating conic sheen on the presence halo. */
+@keyframes presence-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Activity pulse travelling a strand (2D network view). */
+@keyframes strand-pulse {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -200;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe-anim,
+  .motion-safe-anim::before,
+  .motion-safe-anim::after {
+    animation: none !important;
+  }
+}
+
 /* hide the native scrollbar but keep scrolling (used by the chat conversation avatar row) */
 .no-scrollbar {
   scrollbar-width: none;
@@ -74,6 +151,12 @@ body {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Slim, theme-matched scrollbars for the surfaces that do show one. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
 }
 
 input[type="range"] {

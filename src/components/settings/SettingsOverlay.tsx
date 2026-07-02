@@ -57,7 +57,7 @@ export function SettingsOverlay() {
   return (
     <div
       style={{ zIndex: OVERLAY_Z }}
-      className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-[fade_200ms_ease]"
+      className="fixed inset-0 flex items-center justify-center bg-black/70 p-0 backdrop-blur-sm animate-[fade_200ms_ease] sm:p-4"
       onMouseDown={(e) => {
         downOnScrim.current = e.target === e.currentTarget;
       }}
@@ -66,17 +66,18 @@ export function SettingsOverlay() {
         downOnScrim.current = false;
       }}
     >
-      <div className="flex h-[min(760px,92vh)] w-[min(1040px,96vw)] overflow-hidden rounded-2xl border border-white/10 bg-black/60 text-white/85 shadow-[0_0_80px_rgba(0,180,255,0.08)] backdrop-blur-xl">
+      {/* full-screen sheet on phones; floating modal from sm up */}
+      <div className="relative flex h-dvh w-screen flex-col overflow-hidden bg-black/60 pt-[env(safe-area-inset-top)] text-white/85 shadow-[0_0_80px_rgba(0,180,255,0.08)] backdrop-blur-xl sm:h-[min(760px,92vh)] sm:w-[min(1040px,96vw)] sm:flex-row sm:rounded-2xl sm:border sm:border-white/10 sm:pt-0">
+        <button
+          onClick={closeSettings}
+          title="Close (Esc)"
+          className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] z-10 grid h-9 w-9 place-items-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white/80 sm:right-3 sm:top-3 sm:h-8 sm:w-8"
+        >
+          ✕
+        </button>
         {screen === "agent" ? <AgentNav /> : <TopNav />}
 
         <div className="relative flex min-w-0 flex-1 flex-col">
-          <button
-            onClick={closeSettings}
-            title="Close (Esc)"
-            className="absolute right-3 top-3 z-10 rounded-lg px-2 py-1 text-white/50 transition hover:bg-white/10 hover:text-white/80"
-          >
-            ✕
-          </button>
           <div ref={scrollRef} className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
             {screen === "teams" && <TeamsAdmin />}
             {screen === "team" && <TeamEditor />}
@@ -116,8 +117,8 @@ function TopNav() {
   // On the "just Jova" screen the network isn't loaded, so only her appearance editor applies.
   const fullMode = useJovaStore((s) => s.fullMode);
   return (
-    <nav className="flex w-[132px] shrink-0 flex-col gap-1 border-r border-white/10 p-3 sm:w-[180px]">
-      <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">Settings</div>
+    <nav className="no-scrollbar flex w-full shrink-0 flex-row items-center gap-1 overflow-x-auto border-b border-white/10 p-2 pr-12 sm:w-[180px] sm:flex-col sm:items-stretch sm:overflow-visible sm:border-b-0 sm:border-r sm:p-3 sm:pr-3">
+      <div className="mb-0 hidden px-2 text-[11px] font-semibold uppercase tracking-wider text-white/40 sm:mb-2 sm:block">Settings</div>
       {fullMode && <NavItem active={screen === "teams" || screen === "team"} onClick={showTeams} label="Teams" />}
       <NavItem active={screen === "jova"} onClick={showJova} label="Jova" />
       <NavItem active={screen === "chat"} onClick={showChat} label="Chat" />
@@ -145,28 +146,28 @@ function AgentNav() {
   const agent = team?.agents.find((a) => a.id === agentId) ?? null;
 
   return (
-    <nav className="flex w-[132px] shrink-0 flex-col gap-1 border-r border-white/10 p-3 sm:w-[180px]">
+    <nav className="no-scrollbar flex w-full shrink-0 flex-row items-center gap-1 overflow-x-auto border-b border-white/10 p-2 pr-12 sm:w-[180px] sm:flex-col sm:items-stretch sm:overflow-visible sm:border-b-0 sm:border-r sm:p-3 sm:pr-3">
       <button
         onClick={showTeams}
-        className="mb-0.5 self-start rounded px-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 transition hover:text-white/60"
+        className="mb-0 shrink-0 self-auto whitespace-nowrap rounded px-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 transition hover:text-white/60 sm:mb-0.5 sm:self-start"
       >
         ‹ Teams
       </button>
       <button
         onClick={() => team && showTeam(team.id)}
         title={team?.name}
-        className="mb-1 truncate rounded px-2 py-1 text-left text-[12px] text-white/65 transition hover:bg-white/10"
+        className="mb-0 max-w-28 shrink-0 truncate whitespace-nowrap rounded px-2 py-1 text-left text-[12px] text-white/65 transition hover:bg-white/10 sm:mb-1 sm:max-w-none"
       >
         ‹ {team?.name ?? "Team"}
       </button>
-      <div className="mb-2 truncate px-2 text-sm font-semibold" style={{ color: team?.color ?? "#a5f3fc" }}>
+      <div className="mb-0 max-w-28 shrink-0 truncate px-2 text-sm font-semibold sm:mb-2 sm:max-w-none" style={{ color: team?.color ?? "#a5f3fc" }}>
         {agent?.label ?? "Agent"}
       </div>
       {AGENT_NAV.filter((s) => s.key !== "skills" || !agent || roleHasSkills(agent.role)).map((s) => (
         <button
           key={s.key}
           onClick={() => setAgentSection(s.key)}
-          className={`rounded-lg px-3 py-2 text-left text-sm transition ${
+          className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition ${
             section === s.key ? "bg-white/10 text-white/90" : "text-white/60 hover:bg-white/10"
           }`}
         >
@@ -194,7 +195,7 @@ function NavItem({
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      className={`flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+      className={`flex shrink-0 items-center justify-between gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition ${
         disabled ? "cursor-not-allowed text-white/25" : active ? "bg-white/10 text-white/90" : "text-white/60 hover:bg-white/10"
       }`}
     >

@@ -91,7 +91,8 @@ export function MessageList() {
               </span>
               {!typing && (
                 <span
-                  className="text-white/30 opacity-0 transition-opacity group-hover:opacity-100"
+                  // hover-revealed on desktop; always faintly there on touch (no hover to reveal it)
+                  className="text-white/30 opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-60"
                   title={fmtStamp(m.sentAt ?? m.createdAt)}
                 >
                   {fmtStamp(m.sentAt ?? m.createdAt)}

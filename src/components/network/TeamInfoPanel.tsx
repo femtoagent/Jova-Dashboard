@@ -23,7 +23,7 @@ export function TeamInfoPanel() {
 
   return (
     <div
-      className="fixed bottom-5 left-4 z-10 max-h-[80vh] w-[min(320px,82vw)] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-white/85 backdrop-blur-xl animate-[fadein_300ms_ease]"
+      className="fixed bottom-2 left-2 z-10 max-h-[44dvh] w-[min(320px,calc(100vw-100px))] overflow-y-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-white/85 backdrop-blur-xl animate-[fadein_300ms_ease] sm:bottom-5 sm:left-4 sm:max-h-[80vh] sm:w-[min(320px,82vw)]"
       style={{ boxShadow: `0 0 50px ${team.color}22` }}
     >
       {agent ? (

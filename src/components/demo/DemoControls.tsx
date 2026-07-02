@@ -30,6 +30,7 @@ export function DemoControls() {
   const soundOn = useJovaStore((s) => s.soundOn);
   const setSoundOn = useJovaStore((s) => s.setSoundOn);
   const fullMode = useJovaStore((s) => s.fullMode);
+  const viewMode = useJovaStore((s) => s.viewMode);
   const jovaStyle = useJovaStore((s) => s.jovaStyle);
   const setJovaStyle = useJovaStore((s) => s.setJovaStyle);
   const [open, setOpen] = useState(true);
@@ -52,7 +53,7 @@ export function DemoControls() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed left-4 top-4 z-10 rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-[11px] text-white/70 backdrop-blur-md transition hover:bg-white/10"
+        className="fixed left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-[11px] text-white/70 backdrop-blur-md transition hover:bg-white/10"
       >
         ⚙ Demo
       </button>
@@ -60,7 +61,7 @@ export function DemoControls() {
   }
 
   return (
-    <div className="fixed left-4 top-4 z-10 w-56 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-white/80 backdrop-blur-md">
+    <div className="fixed left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 w-56 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-white/80 backdrop-blur-md">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-semibold text-white/90">Demo controls</span>
         <div className="flex items-center gap-1.5">
@@ -84,8 +85,8 @@ export function DemoControls() {
         Speak
       </button>
 
-      {/* Jova's hero forms — only the "just Jova" screen renders the big stage */}
-      {!fullMode && (
+      {/* Jova's hero forms — 3D only, and only the "just Jova" screen renders the big stage */}
+      {!fullMode && viewMode === "3d" && (
         <div className="mb-3">
           <div className="mb-1 text-[10px] uppercase tracking-wider text-white/40">Jova view</div>
           <div className="grid grid-cols-2 gap-1">

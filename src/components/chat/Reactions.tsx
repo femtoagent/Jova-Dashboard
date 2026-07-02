@@ -55,9 +55,9 @@ export function Reactions({
 
   return (
     <div
-      className={`relative flex items-center gap-1 ${hasAny ? "mt-1" : "h-0"} ${
-        align === "right" ? "justify-end" : "justify-start"
-      }`}
+      className={`relative flex items-center gap-1 ${
+        hasAny ? "mt-1" : "h-0 [@media(hover:none)]:mt-1 [@media(hover:none)]:h-auto"
+      } ${align === "right" ? "justify-end" : "justify-start"}`}
     >
       {merged.map((m) => (
         <button
@@ -87,7 +87,10 @@ export function Reactions({
           onClick={() => setPicking((p) => !p)}
           title="Add a reaction"
           className={`inline-flex items-center whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[11px] leading-none text-white/45 transition hover:bg-white/10 hover:text-white/80 ${
-            hasAny ? "" : `absolute top-0 ${align === "right" ? "right-0" : "left-0"} opacity-0 group-hover:opacity-100`
+            hasAny
+              ? ""
+              : // hover-revealed on desktop; always faintly visible on touch (no hover there)
+                `absolute top-0 ${align === "right" ? "right-0" : "left-0"} opacity-0 group-hover:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:opacity-60`
           }`}
         >
           <span>＋</span>
