@@ -17,6 +17,7 @@ import { CreateAgentScreen } from "./CreateAgentScreen";
 import { EditAgentScreen } from "./EditAgentScreen";
 import { ChatScreen } from "./ChatScreen";
 import { VoiceScreen } from "./VoiceScreen";
+import { DisplayScreen } from "./DisplayScreen";
 import { LlmPresetsScreen } from "./LlmPresetsScreen";
 import { MemoryReviewScreen } from "./MemoryReviewScreen";
 import { ScrollMore, useScrollMore } from "./ScrollMore";
@@ -108,6 +109,7 @@ export function SettingsPanel() {
           {screen === "memoryReview" && <MemoryReviewScreen />}
           {screen === "chat" && <ChatScreen />}
           {screen === "voice" && <VoiceScreen />}
+          {screen === "display" && <DisplayScreen />}
         </div>
         <ScrollMore show={more} />
       </div>
@@ -128,6 +130,7 @@ function TopNav() {
   const showVoice = useSettingsStore((s) => s.showVoice);
   const showPresets = useSettingsStore((s) => s.showPresets);
   const showMemoryReview = useSettingsStore((s) => s.showMemoryReview);
+  const showDisplay = useSettingsStore((s) => s.showDisplay);
   // On the "just Jova" screen the network isn't loaded, so only her appearance editor applies.
   const fullMode = useJovaStore((s) => s.fullMode);
   return (
@@ -135,6 +138,7 @@ function TopNav() {
       <div className="mb-0 hidden px-2 text-[11px] font-semibold uppercase tracking-wider text-white/40 sm:mb-2 sm:block">Settings</div>
       {fullMode && <NavItem active={screen === "teams" || screen === "team"} onClick={showTeams} label="Teams" />}
       <NavItem active={screen === "jova"} onClick={showJova} label="Jova" />
+      <NavItem active={screen === "display"} onClick={showDisplay} label="Display" />
       <NavItem active={screen === "chat"} onClick={showChat} label="Chat" />
       <NavItem active={screen === "voice"} onClick={showVoice} label="Voice" />
       <NavItem active={screen === "agents" || screen === "agentCreate" || screen === "agentEdit"} onClick={showAgents} label="Agents" />

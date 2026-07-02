@@ -173,6 +173,90 @@ select:focus-visible,
   }
 }
 
+/* ---- Team Room (the gamified office) ------------------------------------ */
+
+/* crewmate breathing/working bob — parent sets the duration (slow idle, quick active) */
+@keyframes actor-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+/* the idle "z" — sleeps most of the cycle, then drifts up and fades */
+@keyframes zz-drift {
+  0%,
+  62% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.8);
+  }
+  70% {
+    opacity: 0.9;
+  }
+  92%,
+  100% {
+    opacity: 0;
+    transform: translate(7px, -16px) scale(1.15);
+  }
+}
+
+/* little sparks rising off the desk while working */
+@keyframes mote-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.7);
+  }
+  18% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-26px) scale(1.1);
+  }
+}
+
+/* a task sheet dropping onto the pile */
+@keyframes sheet-drop {
+  from {
+    opacity: 0;
+    transform: skewX(-24deg) translateY(-16px);
+  }
+  60% {
+    opacity: 1;
+    transform: skewX(-24deg) translateY(2px);
+  }
+  to {
+    opacity: 0.92;
+    transform: skewX(-24deg) translateY(0);
+  }
+}
+
+/* a finished sheet flying off the pile */
+@keyframes sheet-fly {
+  from {
+    opacity: 0.9;
+    transform: skewX(-24deg) translateY(0) rotate(0deg);
+  }
+  to {
+    opacity: 0;
+    transform: skewX(-24deg) translateY(-34px) rotate(9deg);
+  }
+}
+
+/* the office plant's gentle sway */
+@keyframes plant-sway {
+  0%,
+  100% {
+    transform: rotate(-1.6deg);
+  }
+  50% {
+    transform: rotate(1.6deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion-safe-anim,
   .motion-safe-anim::before,
@@ -199,4 +283,5 @@ select:focus-visible,
 input[type="range"] {
   height: 4px;
 }
+
 

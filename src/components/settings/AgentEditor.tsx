@@ -5,6 +5,8 @@ import { useNetworkStore } from "@/lib/network/useNetworkStore";
 import { useSettingsStore } from "@/lib/settings/useSettingsStore";
 import { CLIENTS, ROLE_LABEL, roleHasSkills } from "@/lib/settings/options";
 import type { AgentClient } from "@/lib/network/types";
+import { ROOM_CHARACTERS, DEFAULT_CHARACTER_BY_ROLE } from "@/lib/agents/roomCharacters";
+import { AgentActor } from "@/components/shell/AgentActor";
 import { SoulComposer } from "./SoulComposer";
 import { MemoryWeb } from "./MemoryWeb";
 import { PresetPicker } from "./PresetPicker";
@@ -40,6 +42,7 @@ export function AgentEditor() {
   const [soul, setSoul] = useState("");
   const [tools, setTools] = useState<string[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
+  const [character, setCharacter] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -50,6 +53,7 @@ export function AgentEditor() {
       setSoul(agent.soul ?? "");
       setTools(agent.tools ?? []);
       setSkills(agent.skills ?? []);
+      setCharacter(agent.character ?? DEFAULT_CHARACTER_BY_ROLE[agent.role]);
     }
     setSaved(false); // don't let a prior agent's "Saved" badge leak across a switch
     // re-sync only when switching to a different agent
@@ -73,11 +77,12 @@ export function AgentEditor() {
     preset !== (agent.openRouterPreset ?? "") ||
     soul !== (agent.soul ?? "") ||
     JSON.stringify(tools) !== JSON.stringify(agent.tools ?? []) ||
-    JSON.stringify(skills) !== JSON.stringify(agent.skills ?? []);
+    JSON.stringify(skills) !== JSON.stringify(agent.skills ?? []) ||
+    character !== (agent.character ?? DEFAULT_CHARACTER_BY_ROLE[agent.role]);
 
   const save = () => {
     const finalLabel = label.trim() || agent.label;
-    updateAgent(team.id, agent.id, { label: finalLabel, client, openRouterPreset: preset, soul, tools, skills });
+    updateAgent(team.id, agent.id, { label: finalLabel, client, openRouterPreset: preset, soul, tools, skills, character });
     setLabel(finalLabel);
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
@@ -100,6 +105,28 @@ export function AgentEditor() {
         <div className="grid gap-4">
           <Field label="Name">
             <input value={label} onChange={(e) => setLabel(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Team Room character">
+            <div data-character-picker className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">
+              {ROOM_CHARACTERS.map((c) => {
+                const active = character === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCharacter(c.id)}
+                    title={`${c.name} — ${c.desc}`}
+                    className={`flex flex-col items-center gap-0.5 rounded-lg border p-1.5 transition ${
+                      active ? "border-cyan-300/50 bg-cyan-400/15" : "border-white/10 bg-white/[0.03] hover:bg-white/10"
+                    }`}
+                  >
+                    <AgentActor character={c} active={active} width={34} />
+                    <span className={`text-[10px] ${active ? "text-cyan-50" : "text-white/60"}`}>{c.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-[11px] text-white/35">Who sits at this agent&rsquo;s desk in the team&rsquo;s office.</p>
           </Field>
           <Field label="Role">
             <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/55">

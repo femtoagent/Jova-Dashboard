@@ -8,8 +8,10 @@ import { NexusOverviewBody } from "@/components/network/NexusInfoPanel";
 import { TeamView, AgentDetail } from "@/components/network/TeamInfoPanel";
 import { DreamsFeed } from "@/components/network/DreamerPane";
 import { NetworkMap } from "./NetworkMap";
+import { TeamRoom } from "./TeamRoom";
 import { ConversationPane } from "./ConversationPane";
 import { StageAudio } from "@/components/stage/StageAudio";
+import { useDisplayPrefs } from "@/lib/settings/useDisplayPrefs";
 import { CaretDown, CaretUp, Cloud, SpeakerHigh, SpeakerSlash, X } from "@phosphor-icons/react";
 
 /** localStorage key: the mobile network sheet's expanded/collapsed preference. */
@@ -34,6 +36,7 @@ export function NetworkView() {
   const soundOn = useJovaStore((s) => s.soundOn);
   const setSoundOn = useJovaStore((s) => s.setSoundOn);
   const [dreamsOpen, setDreamsOpen] = useState(false);
+  const teamRoomOn = useDisplayPrefs((s) => s.teamRoom);
   // The mobile bottom-sheet is a saved preference: collapsed by default, and it STAYS however you
   // last left it as you click around teams (never auto-toggled). Persisted across reloads.
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -111,10 +114,10 @@ export function NetworkView() {
         </div>
       </header>
 
-      {/* map + docked sidebar; on phones the sidebar becomes an expand/contract bottom sheet */}
+      {/* map (or the focused team's office) + docked sidebar; sidebar is a bottom sheet on phones */}
       <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
         <div className="relative min-h-[30dvh] flex-1 sm:h-auto sm:min-h-0 sm:flex-1">
-          <NetworkMap />
+          {focusedTeam && teamRoomOn ? <TeamRoom team={focusedTeam} /> : <NetworkMap />}
         </div>
 
         {chatOpen ? (

@@ -19,6 +19,7 @@ import { VoiceLayer } from "@/components/voice/VoiceLayer";
 import { useVoicePrefs } from "@/lib/settings/useVoicePrefs";
 import { useVoiceStatus } from "@/lib/settings/useVoiceStatus";
 import { useAgentVoices } from "@/lib/settings/useAgentVoices";
+import { useDisplayPrefs } from "@/lib/settings/useDisplayPrefs";
 import { useLogStore } from "@/lib/logs/useLogStore";
 import { useActivityDriver } from "@/lib/network/useActivityDriver";
 import { setOnVoiceUnavailable } from "@/lib/audio/tts";
@@ -41,6 +42,7 @@ export function CommandCenter() {
   const hydrateViewMode = useJovaStore((s) => s.hydrateViewMode);
   const hydrateVoicePrefs = useVoicePrefs((s) => s.hydrate);
   const hydrateAgentVoices = useAgentVoices((s) => s.hydrate);
+  const hydrateDisplayPrefs = useDisplayPrefs((s) => s.hydrate);
   const refreshVoiceStatus = useVoiceStatus((s) => s.refreshAll);
 
   // The mock network simulation (tasks / approvals / logs / nexusActive) — renderer-independent.
@@ -50,6 +52,7 @@ export function CommandCenter() {
   useEffect(() => {
     hydrateJovaStyle();
     hydrateViewMode();
+    hydrateDisplayPrefs();
     hydrateVoicePrefs();
     hydrateAgentVoices();
     // voiceOn isn't persisted (it's the in-session quick-mute), so re-derive it from Jova's persisted
@@ -70,7 +73,7 @@ export function CommandCenter() {
       }
     });
     return () => setOnVoiceUnavailable(null);
-  }, [hydrateJovaStyle, hydrateViewMode, hydrateVoicePrefs, hydrateAgentVoices, refreshVoiceStatus]);
+  }, [hydrateJovaStyle, hydrateViewMode, hydrateDisplayPrefs, hydrateVoicePrefs, hydrateAgentVoices, refreshVoiceStatus]);
 
   // Ensure a session exists. createSession opens the chat pane (right for the classic world);
   // the Default shell boots to the STAGE instead — her greeting arrives as captions on it.

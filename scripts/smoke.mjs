@@ -46,7 +46,7 @@ page.on("console", (m) => m.type() === "error" && errors.push("console.error: " 
 page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const store = (fn) => page.evaluate(fn);
+const store = (fn, ...args) => page.evaluate(fn, ...args);
 /** REAL mouse click on the first button whose title starts with `t`. */
 const clickByTitle = async (t) => {
   const h = await page.evaluateHandle((tt) => [...document.querySelectorAll("button")].find((b) => b.title.startsWith(tt)) ?? null, t);
@@ -167,6 +167,150 @@ await wait(400);
 check(await store(() => [...document.querySelectorAll("button")].some((b) => b.textContent.includes("Run today"))), "dreams feed docks in the sidebar");
 await clickByTitle("Close dreams");
 
+// ---- 2b. The Team Room (gamified office) -------------------------------------
+await store(() => window.__networkStore.getState().focusTeam("forge"));
+await wait(700);
+check(await store(() => !!document.querySelector("[data-team-room]")), "focusing a team enters its office");
+check(await store(() => !!document.querySelector("[data-office-backdrop]")), "office backdrop renders");
+check(
+  await store(() => {
+    const team = window.__networkStore.getState().teams.find((t) => t.id === "forge");
+    return document.querySelectorAll("[data-agent-desk]").length === team.agents.length;
+  }),
+  "one desk per agent",
+);
+check(await store(() => !!document.querySelector("[data-initiative-board]")), "initiatives board on the wall");
+check(await store(() => !!document.querySelector("[data-demo-board]")), "demo board on the wall");
+
+// idle vs active + the work pile: drive a task on a known agent
+const dev = await store(() => {
+  const t = window.__networkStore.getState().teams.find((x) => x.id === "forge");
+  const a = t.agents.find((x) => x.role === "developer") ?? t.agents[1];
+  // clear existing tasks so the assertions are deterministic
+  for (const task of [...a.tasks]) window.__networkStore.getState().completeTask(t.id, a.id, task.id);
+  return a.id;
+});
+await wait(900); // let fly-off ghosts clear
+check(
+  await store((id) => document.querySelector(`[data-agent-desk][data-agent-id="${id}"]`)?.dataset.active === "false", dev),
+  "agent with no tasks reads idle",
+);
+const taskId = await store((id) => window.__networkStore.getState().startTask("forge", id, "Smoke the room", null), dev);
+await wait(500);
+check(
+  await store(
+    (a) => {
+      const desk = document.querySelector(`[data-agent-desk][data-agent-id="${a.dev}"]`);
+      return desk?.dataset.active === "true" && !!desk.querySelector(`[data-sheet][data-task-id="${a.taskId}"]`);
+    },
+    { dev, taskId },
+  ),
+  "starting a task pops a sheet + agent goes active",
+);
+await store((a) => window.__networkStore.getState().completeTask("forge", a.dev, a.taskId), { dev, taskId });
+await wait(900);
+// assert THIS task's sheet is gone (the live driver may have assigned fresh work meanwhile)
+check(
+  await store((id) => !document.querySelector(`[data-sheet][data-task-id="${id}"]`), taskId),
+  "completing the task removes its sheet",
+);
+
+// initiative board: PM task pops on, then strikes through on completion
+const pmTask = await store(() => {
+  const t = window.__networkStore.getState().teams.find((x) => x.id === "forge");
+  const pm = t.agents.find((x) => x.role === "pm");
+  return { pm: pm.id, task: window.__networkStore.getState().startTask("forge", pm.id, "Ship the smoke feature", null) };
+});
+await wait(400);
+check(
+  await store(() => [...document.querySelectorAll('[data-initiative="open"]')].some((r) => r.textContent.includes("Ship the smoke feature"))),
+  "new initiative pops onto the board",
+);
+await store((a) => window.__networkStore.getState().completeTask("forge", a.pm, a.task), pmTask);
+await wait(400);
+check(
+  await store(() => [...document.querySelectorAll('[data-initiative="done"]')].some((r) => r.textContent.includes("Ship the smoke feature"))),
+  "completed initiative is crossed out before dropping off",
+);
+
+// handoff flight: the packet carries its sender, then clears
+await store((id) => {
+  const t = window.__networkStore.getState().teams.find((x) => x.id === "forge");
+  const pm = t.agents.find((x) => x.role === "pm");
+  window.__networkStore.getState().emitFlow({ teamId: "forge", fromAgentId: pm.id, toAgentId: id, taskId: "smoke-flight", taskTitle: "Flight test", kind: "assign" });
+}, dev);
+await wait(350);
+check(
+  await store(() => {
+    const p = document.querySelector("[data-flow-packet]");
+    return !!p && !!p.dataset.from && p.textContent.includes("from ");
+  }),
+  "handoff packet flies with a readable sender",
+);
+await page.screenshot({ path: "demo-team-room.png" });
+await wait(1600);
+// OUR flight must be gone (the live driver keeps emitting flows of its own)
+check(
+  await store(() => !window.__networkStore.getState().flows.some((f) => f.taskId === "smoke-flight")),
+  "flight clears after landing",
+);
+
+// demo board: glows with a demo, opens the modal, dismiss clears it
+await store(() => window.__networkStore.getState().addDemo("forge", "Smoke demo", "A demo produced by the smoke test.", "https://example.com/demo"));
+await wait(300);
+check(await clickByTitle("1 demo ready"), "demo board clickable when a demo is ready");
+await wait(300);
+check(await store(() => !!document.querySelector("[data-demo-modal]") && document.body.textContent.includes("Smoke demo")), "demo modal opens with the demo");
+await clickByText("Dismiss");
+await wait(400);
+check(
+  await store(() => !document.querySelector("[data-demo-modal]") && window.__networkStore.getState().demos.length === 0),
+  "dismissing the demo clears the board",
+);
+
+// character picker: choose a different crewmate through the real settings UI
+await store((id) => window.__settingsStore.getState().openAgent("forge", id), dev);
+await wait(500);
+check(await store(() => !!document.querySelector("[data-character-picker]")), "character picker in the agent editor");
+await store(() => [...document.querySelectorAll("[data-character-picker] button")].find((b) => b.textContent.includes("Umbra"))?.click());
+await wait(200);
+await clickByText("Save");
+await wait(300);
+await store(() => window.__settingsStore.getState().closeSettings());
+await wait(400);
+check(
+  await store((id) => {
+    const t = window.__networkStore.getState().teams.find((x) => x.id === "forge");
+    return t.agents.find((a) => a.id === id)?.character === "umbra";
+  }, dev),
+  "picked character saves to the agent",
+);
+
+// the room is a setting: toggle off via the real Display screen -> map returns while focused
+await store(() => window.__settingsStore.getState().openSettings("display"));
+await wait(400);
+await store(() => document.querySelector('[data-team-room-toggle] input')?.click());
+await store(() => window.__settingsStore.getState().closeSettings());
+await wait(400);
+check(
+  await store(() => !document.querySelector("[data-team-room]") && !!document.querySelector("[data-network-map]")),
+  "toggle off returns the constellation while focused",
+);
+await store(() => window.__settingsStore.getState().openSettings("display"));
+await wait(300);
+await store(() => document.querySelector('[data-team-room-toggle] input')?.click());
+await store(() => window.__settingsStore.getState().closeSettings());
+await wait(400);
+check(await store(() => !!document.querySelector("[data-team-room]")), "toggle back on restores the office");
+
+// the back chip returns to the map
+check(await clickByTitle("Back to the network map"), "back chip clickable");
+await wait(400);
+check(
+  await store(() => window.__networkStore.getState().focusedTeamId === null && !!document.querySelector("[data-network-map]")),
+  "back chip returns to the network map",
+);
+
 // ---- 3. The classic 3D world still works ------------------------------------
 await store(() => window.__jovaStore.getState().setViewMode("3d"));
 await page.waitForSelector("canvas", { timeout: 20000 });
@@ -254,6 +398,19 @@ await wait(400);
 await store(() => window.__networkStore.getState().focusTeam("halo"));
 await wait(400);
 check((await bodyH()) < 8, "mobile: sheet stays closed across team clicks");
+
+// the Team Room on a phone: fills the map area, desks fit, back chip works
+check(
+  await store(() => {
+    const room = document.querySelector("[data-team-room]");
+    if (!room) return false;
+    const r = room.getBoundingClientRect();
+    return r.width <= window.innerWidth + 1 && document.querySelectorAll("[data-agent-desk]").length > 0;
+  }),
+  "mobile: team room fits the phone with desks laid out",
+);
+await page.screenshot({ path: "demo-mobile-team-room.png" });
+check(await clickByTitle("Back to the network map"), "mobile: back chip returns to the map");
 
 console.log("ERRORS:", errors.length ? "\n" + errors.join("\n") : "none");
 await browser.close();

@@ -38,6 +38,9 @@ export interface AgentTask {
   title: string;
   /** steps taken so far — rendered as the LENGTH (segments) of this task's chain */
   steps: number;
+  /** who handed this work over (assigner / upstream agent); null|undefined = Nexus / self-started.
+   *  The Team Room renders this as the sheet's provenance stamp (sender color + glyph). */
+  fromAgentId?: string | null;
 }
 
 export interface AgentNode {
@@ -68,6 +71,8 @@ export interface AgentNode {
   memory?: MemoryNode[];
   /** apps / API keys this agent has access to (secrets masked) */
   access?: AccessGrant[];
+  /** Team Room character id (see lib/agents/roomCharacters); unset = the role's default */
+  character?: string;
 }
 
 export interface TeamMetrics {
@@ -123,4 +128,32 @@ export interface Dream {
   title: string;
   color: string;
   text: string;
+}
+
+/**
+ * A moment of work moving between agents — a PM assigning a task, or an agent handing its
+ * output downstream. Transient: the Team Room animates it (a document flying desk-to-desk,
+ * stamped with the sender's identity) and then clears it. Bounded + auto-expiring in the store.
+ */
+export interface FlowEvent {
+  id: string;
+  teamId: string;
+  /** the sender; null = spawned by Nexus / no visible sender */
+  fromAgentId: string | null;
+  toAgentId: string;
+  /** the task this flow created on the target (lets the landed sheet keep sender identity) */
+  taskId: string;
+  taskTitle: string;
+  kind: "assign" | "handoff";
+  ts: number;
+}
+
+/** Something a team wants to SHOW the operator — surfaces on the Team Room's demo board. */
+export interface Demo {
+  id: string;
+  teamId: string;
+  title: string;
+  description: string;
+  /** http(s) link opens in a new tab; a vault-relative path opens in the DocPanel */
+  url: string;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { AccessGrant, AgentNode, AgentRole, Approval, Dream, MemoryNode, Team, TeamMetrics } from "./types";
+import type { AccessGrant, AgentNode, AgentRole, Approval, Demo, Dream, FlowEvent, MemoryNode, Team, TeamMetrics } from "./types";
 import { useJovaStore } from "@/lib/state/useJovaStore";
 
 /** Fallback origin for the team strands until NexusViz publishes its real crown world position.
@@ -96,6 +96,12 @@ let taskCounter = 1;
 const newTaskId = () => `task-${taskCounter++}`;
 let approvalCounter = 1;
 const newApprovalId = () => `appr-${approvalCounter++}`;
+let flowCounter = 1;
+const newFlowId = () => `flow-${flowCounter++}`;
+let demoCounter = 1;
+const newDemoId = () => `demo-${demoCounter++}`;
+/** flows older than this are swept on the next emit (backstop if no room is mounted to clear them) */
+const FLOW_TTL_MS = 2500;
 let teamIdCounter = 100;
 let addedCount = 0; // monotonic — keeps added teams' names/colours unique across add/remove churn
 let dreamCounter = 1;
@@ -192,6 +198,10 @@ interface NetworkState {
   draggingTeamId: string | null;
   /** PM/Nexus daily improvement ideas awaiting your response (separate from operational approvals). */
   dreams: Dream[];
+  /** transient work-movement events (assign / handoff) the Team Room animates; bounded + expiring */
+  flows: FlowEvent[];
+  /** things teams want to SHOW the operator — the Team Room's demo board */
+  demos: Demo[];
   /** world position the team strands emanate from — Nexus's crown (published by NexusViz on mount). */
   nexusHub: [number, number, number];
   /** shared time window for all financial metrics (team + Nexus rollup). */
@@ -200,9 +210,16 @@ interface NetworkState {
   focusTeam: (id: string | null) => void;
   selectAgent: (teamId: string, agentId: string | null) => void;
   setMetricsWindow: (w: MetricsWindow) => void;
-  startTask: (teamId: string, agentId: string, title: string) => void;
+  /** start a task; `fromAgentId` records who handed it over (provenance on the room's sheets) */
+  startTask: (teamId: string, agentId: string, title: string, fromAgentId?: string | null) => string | null;
   advanceTask: (teamId: string, agentId: string, taskId: string) => void;
   completeTask: (teamId: string, agentId: string, taskId: string) => void;
+  /** record a work-movement moment for the Team Room to animate (bounded; stale ones dropped) */
+  emitFlow: (e: Omit<FlowEvent, "id" | "ts">) => void;
+  /** the room calls this when a flight animation finishes (or on expiry) */
+  clearFlow: (id: string) => void;
+  addDemo: (teamId: string, title: string, description: string, url: string) => void;
+  resolveDemo: (demoId: string) => void;
   addAgent: (teamId: string, role: AgentRole, label: string) => string | null;
   removeAgent: (teamId: string, agentId: string) => void;
   /** create a team (optionally with identity); returns the new team id */
@@ -213,7 +230,7 @@ interface NetworkState {
   updateAgent: (
     teamId: string,
     agentId: string,
-    patch: Partial<Pick<AgentNode, "label" | "client" | "openRouterPreset" | "soul" | "tools" | "skills">>
+    patch: Partial<Pick<AgentNode, "label" | "client" | "openRouterPreset" | "soul" | "tools" | "skills" | "character">>
   ) => void;
   /** add an app / API-key grant to an agent (caller passes an already-masked keyHint, never the secret) */
   addAccess: (teamId: string, agentId: string, app: string, keyHint?: string) => void;
@@ -243,6 +260,8 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
   radialTeamId: null,
   draggingTeamId: null,
   dreams: makeDreams(SEED_TEAMS),
+  flows: [],
+  demos: [],
   nexusHub: NEXUS_HUB,
   metricsWindow: 1,
 
@@ -250,12 +269,37 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
   selectAgent: (teamId, agentId) => set({ focusedTeamId: teamId, selectedAgentId: agentId, talkingAgentId: null, radialAgentId: null, radialTeamId: null }),
   setMetricsWindow: (w) => set({ metricsWindow: w }),
 
-  startTask: (teamId, agentId, title) =>
+  startTask: (teamId, agentId, title, fromAgentId) => {
+    const holder = get().teams.find((c) => c.id === teamId)?.agents.find((a) => a.id === agentId);
+    if (!holder || holder.tasks.length >= 3) return null;
+    const id = newTaskId();
     set((st) => ({
       teams: updateAgent(st.teams, teamId, agentId, (a) =>
-        a.tasks.length >= 3 ? a : { ...a, tasks: [...a.tasks, { id: newTaskId(), title, steps: 1 }] }
+        a.tasks.length >= 3 ? a : { ...a, tasks: [...a.tasks, { id, title, steps: 1, fromAgentId: fromAgentId ?? null }] }
       ),
-    })),
+    }));
+    return id;
+  },
+
+  emitFlow: (e) =>
+    set((st) => {
+      const now = Date.now();
+      // sweep stale + cap so an unmounted room can never leak events
+      const kept = st.flows.filter((f) => now - f.ts < FLOW_TTL_MS).slice(-7);
+      return { flows: [...kept, { ...e, id: newFlowId(), ts: now }] };
+    }),
+
+  clearFlow: (id) =>
+    set((st) => (st.flows.some((f) => f.id === id) ? { flows: st.flows.filter((f) => f.id !== id) } : {})),
+
+  addDemo: (teamId, title, description, url) =>
+    set((st) =>
+      st.demos.filter((d) => d.teamId === teamId).length >= 2
+        ? {}
+        : { demos: [...st.demos, { id: newDemoId(), teamId, title, description, url }] }
+    ),
+
+  resolveDemo: (demoId) => set((st) => ({ demos: st.demos.filter((d) => d.id !== demoId) })),
 
   advanceTask: (teamId, agentId, taskId) =>
     set((st) => ({
