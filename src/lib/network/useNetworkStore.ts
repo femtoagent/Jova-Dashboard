@@ -100,8 +100,9 @@ let flowCounter = 1;
 const newFlowId = () => `flow-${flowCounter++}`;
 let demoCounter = 1;
 const newDemoId = () => `demo-${demoCounter++}`;
-/** flows older than this are swept on the next emit (backstop if no room is mounted to clear them) */
-const FLOW_TTL_MS = 2500;
+/** flows older than this are swept on the next emit (backstop if no room is mounted to clear them).
+ *  Must exceed the longest walk (≤1800ms) + toss + flight + landing so live flights never get swept. */
+const FLOW_TTL_MS = 4200;
 let teamIdCounter = 100;
 let addedCount = 0; // monotonic — keeps added teams' names/colours unique across add/remove churn
 let dreamCounter = 1;

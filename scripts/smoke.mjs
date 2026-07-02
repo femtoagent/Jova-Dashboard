@@ -240,21 +240,25 @@ await store((id) => {
   const pm = t.agents.find((x) => x.role === "pm");
   window.__networkStore.getState().emitFlow({ teamId: "forge", fromAgentId: pm.id, toAgentId: id, taskId: "smoke-flight", taskTitle: "Flight test", kind: "assign" });
 }, dev);
-await wait(1150); // the sender walks ~920ms before the toss
-check(
-  await store(() => {
-    const p = document.querySelector("[data-flow-packet]");
-    return !!p && !!p.dataset.from && p.textContent.includes("from ");
-  }),
-  "handoff packet flies with a readable sender",
-);
+// the sender walks the aisle first (duration scales with distance), then the packet flies
+const packetSeen = await page
+  .waitForFunction(
+    () => {
+      const p = document.querySelector("[data-flow-packet]");
+      return !!p && !!p.dataset.from && p.textContent.includes("from ");
+    },
+    { timeout: 4500 },
+  )
+  .then(() => true)
+  .catch(() => false);
+check(packetSeen, "handoff packet flies with a readable sender");
 await page.screenshot({ path: "demo-team-room.png" });
-await wait(1500);
 // OUR flight must be gone (the live driver keeps emitting flows of its own)
-check(
-  await store(() => !window.__networkStore.getState().flows.some((f) => f.taskId === "smoke-flight")),
-  "flight clears after landing",
-);
+const flightCleared = await page
+  .waitForFunction(() => !window.__networkStore.getState().flows.some((f) => f.taskId === "smoke-flight"), { timeout: 6000 })
+  .then(() => true)
+  .catch(() => false);
+check(flightCleared, "flight clears after landing");
 
 // demo board: the TV turns on with a demo, opens the modal, dismiss clears OUR demo
 await store(() => window.__networkStore.getState().addDemo("forge", "Smoke demo", "A demo produced by the smoke test.", "https://example.com/demo"));
@@ -340,14 +344,23 @@ const walkPair = await store(() => {
 });
 await wait(300);
 check(
-  await store((id) => document.querySelector(`[data-agent-desk][data-agent-id="${id}"]`)?.dataset.walking === "true", walkPair),
-  "handoff sender walks toward the receiver",
+  await store(
+    (id) =>
+      document.querySelector(`[data-agent-desk][data-agent-id="${id}"]`)?.dataset.walking === "true" &&
+      !!document.querySelector(`[data-walker][data-agent-id="${id}"]`),
+    walkPair,
+  ),
+  "handoff sender leaves the desk as an overlay walker",
 );
-await wait(1500);
-check(
-  await store((id) => document.querySelector(`[data-agent-desk][data-agent-id="${id}"]`)?.dataset.walking === "false", walkPair),
-  "sender walks back after the toss",
-);
+const walkedHome = await page
+  .waitForFunction(
+    (id) => document.querySelector(`[data-agent-desk][data-agent-id="${id}"]`)?.dataset.walking === "false",
+    { timeout: 7000 },
+    walkPair,
+  )
+  .then(() => true)
+  .catch(() => false);
+check(walkedHome, "sender walks the aisles back to its seat");
 
 // Nexus tosses work in from OUTSIDE the window
 await store((id) => {
@@ -514,6 +527,22 @@ check(
   "mobile: Fit shows the whole big roster",
 );
 await page.screenshot({ path: "demo-mobile-team-room-big.png" });
+
+// PINCH-ZOOM: two real touch points spreading apart zoom the room back in
+const zBefore = await store(() => parseFloat(document.querySelector("[data-team-room]")?.dataset.zoom ?? "0"));
+const cdp = await page.target().createCDPSession();
+const pcx = 195;
+const pcy = 380;
+await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: pcx - 22, y: pcy }, { x: pcx + 22, y: pcy }] });
+for (let s = 1; s <= 6; s++) {
+  const off = 22 + s * 16;
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: pcx - off, y: pcy }, { x: pcx + off, y: pcy }] });
+  await wait(30);
+}
+await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+await wait(350);
+const zAfter = await store(() => parseFloat(document.querySelector("[data-team-room]")?.dataset.zoom ?? "0"));
+check(zAfter > zBefore + 0.04, `mobile: pinching zooms the room in (${zBefore} -> ${zAfter})`);
 await store(() => window.__networkStore.getState().focusTeam("halo"));
 await wait(300);
 check(await clickByTitle("Back to the network map"), "mobile: back chip returns to the map");

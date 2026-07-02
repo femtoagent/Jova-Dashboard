@@ -5,39 +5,23 @@ import { useNetworkStore } from "@/lib/network/useNetworkStore";
 import type { FlowEvent, Team } from "@/lib/network/types";
 import { characterFor, NEXUS_SENDER } from "@/lib/agents/roomCharacters";
 import { NexusGlyph, roleIcon } from "@/lib/agents/roleGlyphs";
+import { planWalk } from "./walkPlan";
 
 export interface Anchor {
   x: number;
   y: number;
 }
 
+/** what the flight layer needs per agent: where the desk sits, and where the chest is */
+export interface AgentSpot {
+  desk: Anchor;
+  chest: Anchor;
+}
+
 const FLIGHT_MS = 950;
 const LAND_MS = 340;
-/** the SENDER walks this share of the way (capped), then tosses the doc the rest */
-export const WALK_FRACTION = 0.58;
-export const WALK_MAX_PX = 190;
-/** total walk time before the toss: sidestep around the desk, then the main leg */
-export const WALK_MS = 840;
 /** how long the Nexus orb winds up outside the window before the toss */
 export const NEXUS_WINDUP_MS = 550;
-
-/** The sender's walk vector (shared with TeamRoom, which slides the crewmate). */
-export function walkVector(from: Anchor, to: Anchor): Anchor {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const walk = Math.min(len * WALK_FRACTION, WALK_MAX_PX);
-  return { x: (dx / len) * walk, y: (dy / len) * walk };
-}
-
-/**
- * The first leg: step out from BEHIND the desk (sideways toward the target + forward past the
- * desk front) so the walk goes around the furniture instead of through it.
- */
-export function sidestepVector(from: Anchor, to: Anchor, scale: number): Anchor {
-  const side = to.x >= from.x ? 1 : -1;
-  return { x: side * 64 * scale, y: 46 * scale };
-}
 
 /**
  * The flying documents. Assigns toss straight from the PM's desk; handoffs launch AFTER the
@@ -49,11 +33,13 @@ export function sidestepVector(from: Anchor, to: Anchor, scale: number): Anchor 
  */
 export function HandoffLayer({
   team,
-  anchors,
+  spots,
+  scale,
   nexusAnchor,
 }: {
   team: Team;
-  anchors: Record<string, Anchor>;
+  spots: Record<string, AgentSpot>;
+  scale: number;
   nexusAnchor: Anchor;
 }) {
   const flows = useNetworkStore((s) => s.flows);
@@ -61,7 +47,7 @@ export function HandoffLayer({
   return (
     <div className="pointer-events-none absolute inset-0" style={{ zIndex: 700 }} aria-hidden>
       {mine.map((f) => (
-        <Packet key={f.id} flow={f} team={team} anchors={anchors} nexusAnchor={nexusAnchor} />
+        <Packet key={f.id} flow={f} team={team} spots={spots} scale={scale} nexusAnchor={nexusAnchor} />
       ))}
     </div>
   );
@@ -70,12 +56,14 @@ export function HandoffLayer({
 function Packet({
   flow,
   team,
-  anchors,
+  spots,
+  scale,
   nexusAnchor,
 }: {
   flow: FlowEvent;
   team: Team;
-  anchors: Record<string, Anchor>;
+  spots: Record<string, AgentSpot>;
+  scale: number;
   nexusAnchor: Anchor;
 }) {
   const packetRef = useRef<HTMLDivElement>(null);
@@ -89,12 +77,14 @@ function Packet({
   const fromName = flow.fromAgentId === null ? NEXUS_SENDER.name : sender?.label ?? "?";
   const Glyph = flow.fromAgentId === null ? NexusGlyph : sender ? roleIcon(sender.role) : NexusGlyph;
 
-  const senderAnchor = flow.fromAgentId === null ? nexusAnchor : anchors[flow.fromAgentId ?? ""];
-  const to = anchors[flow.toAgentId];
-  const walks = !!sender; // ANY flow with a visible sender walks (assign and handoff alike)
-  // walkers launch from where they STOP; Nexus tosses from the window after its wind-up
-  const from = walks && senderAnchor && to ? add(senderAnchor, walkVector(senderAnchor, to)) : senderAnchor;
-  const delay = walks ? WALK_MS + 80 : flow.fromAgentId === null ? NEXUS_WINDUP_MS : 0;
+  const senderSpot = flow.fromAgentId ? spots[flow.fromAgentId] : undefined;
+  const targetSpot = spots[flow.toAgentId];
+  const to = targetSpot?.chest;
+  // ANY flow with a visible sender walks: the packet launches from the walk plan's toss point,
+  // on the plan's clock (both sides compute the identical plan). Nexus tosses from the window.
+  const plan = senderSpot && targetSpot ? planWalk(senderSpot.desk, targetSpot.desk, scale) : null;
+  const from = plan ? plan.toss : flow.fromAgentId === null ? nexusAnchor : senderSpot?.chest;
+  const delay = plan ? plan.duration + 90 : flow.fromAgentId === null ? NEXUS_WINDUP_MS : 0;
 
   useEffect(() => {
     const clear = () => useNetworkStore.getState().clearFlow(flow.id);
@@ -214,10 +204,6 @@ export function NexusVisitors({ team, nexusAnchor }: { team: Team; nexusAnchor: 
       )}
     </div>
   );
-}
-
-function add(a: Anchor, b: Anchor): Anchor {
-  return { x: a.x + b.x, y: a.y + b.y };
 }
 
 /** A dark, readable version of the accent for the glyph on the light paper. */

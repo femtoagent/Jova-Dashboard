@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useNetworkStore } from "@/lib/network/useNetworkStore";
-import type { AgentNode, AgentTask, FlowEvent, Team } from "@/lib/network/types";
+import type { AgentNode, AgentTask, Team } from "@/lib/network/types";
 import { characterFor, NEXUS_SENDER } from "@/lib/agents/roomCharacters";
 import { roleIcon } from "@/lib/agents/roleGlyphs";
 import { Wrench } from "@phosphor-icons/react";
@@ -29,8 +29,7 @@ export function AgentDesk({
   z,
   selected,
   talking,
-  walkX = 0,
-  walkY = 0,
+  hideActor = false,
   celebrateTick = 0,
   onSelect,
 }: {
@@ -42,8 +41,8 @@ export function AgentDesk({
   z: number;
   selected: boolean;
   talking: boolean;
-  walkX?: number;
-  walkY?: number;
+  /** true while this crewmate is out walking a delivery (the WalkerLayer draws it instead) */
+  hideActor?: boolean;
   celebrateTick?: number;
   onSelect: () => void;
 }) {
@@ -53,7 +52,6 @@ export function AgentDesk({
   const flows = useNetworkStore((s) => s.flows);
   const { ghosts, hopTick } = useGhostSheets(agent.tasks);
   const [bang, setBang] = useState(false); // the "!" when handed work lands
-  const walking = walkX !== 0 || walkY !== 0;
 
   // provenance for a sheet: sender's character accent (or Nexus), owner's accent as fallback
   const sheetIdentity = (t: AgentTask) => {
@@ -70,6 +68,7 @@ export function AgentDesk({
 
   const idle = !active ? idleBeatFor(agent, c.accent) : null;
   const hopKey = hopTick + celebrateTick * 1000;
+  const walking = hideActor;
 
   return (
     <button
@@ -90,8 +89,7 @@ export function AgentDesk({
         height: DESK_H,
         transform: `translate(-50%, -100%) scale(${scale})`,
         transformOrigin: "50% 100%",
-        // a walking crewmate crosses open floor — lift its unit above the other furniture
-        zIndex: walking ? 400 : z,
+        zIndex: z,
       }}
     >
       {/* ground: shadow + selection/talking rings */}
@@ -113,7 +111,7 @@ export function AgentDesk({
         )}
       </svg>
 
-      {/* the crewmate — walk slide (outer), one-shot hop (keyed), bob loop, then the body */}
+      {/* the crewmate — hidden while out on a delivery (the WalkerLayer draws it walking) */}
       <div
         className="absolute"
         style={{
@@ -121,8 +119,7 @@ export function AgentDesk({
           top: 38,
           width: 64,
           height: 80,
-          transform: walking ? `translate(${walkX / scale}px, ${walkY / scale}px)` : "translate(0, 0)",
-          transition: "transform 650ms cubic-bezier(0.45, 0, 0.35, 1)",
+          visibility: walking ? "hidden" : "visible",
           zIndex: 2,
         }}
       >
@@ -130,13 +127,11 @@ export function AgentDesk({
           <div
             className="motion-safe-anim"
             style={{
-              animation: `actor-bob ${walking ? "0.45s" : active ? "1.7s" : "4.2s"} ease-in-out infinite${
-                idle?.wrapperAnim ? `, ${idle.wrapperAnim}` : ""
-              }`,
+              animation: `actor-bob ${active ? "1.7s" : "4.2s"} ease-in-out infinite${idle?.wrapperAnim ? `, ${idle.wrapperAnim}` : ""}`,
               opacity: active ? 1 : 0.85,
             }}
           >
-            <AgentActor character={c} active={active || walking} width={64} />
+            <AgentActor character={c} active={active} width={64} />
           </div>
         </div>
 
@@ -178,7 +173,15 @@ export function AgentDesk({
       {/* role badge on the chest */}
       <span
         className="absolute grid h-[17px] w-[17px] place-items-center rounded-full border"
-        style={{ left: 91, top: 79, background: "#0d1018", borderColor: c.accent, color: c.accent, zIndex: 2 }}
+        style={{
+          left: 91,
+          top: 79,
+          background: "#0d1018",
+          borderColor: c.accent,
+          color: c.accent,
+          zIndex: 2,
+          visibility: walking ? "hidden" : "visible",
+        }}
         aria-hidden
       >
         <Glyph size={10} weight="bold" />
@@ -234,7 +237,7 @@ export function AgentDesk({
               color={id.color}
               from={id.from}
               bottom={below}
-              flight={flows.find((f) => f.taskId === t.id)}
+              inFlight={flows.some((f) => f.taskId === t.id)}
               onLanded={onLanded}
             />
           );
@@ -310,34 +313,33 @@ export function AgentDesk({
 }
 
 /**
- * One pile sheet. If its task arrived on a flight (a matching FlowEvent existed at mount), the
- * drop-in is DELAYED so the sheet lands together with the flying document — the delay is
- * captured once at mount so the later flow-clear can't restart the animation.
+ * One pile sheet. If its task arrived on a flight, the sheet WAITS (invisible) and drops in the
+ * moment the flight clears — true event sync, so walks of any length land the paper exactly when
+ * the flying document does. Tasks with no flight (direct starts) drop immediately on mount.
  */
 function Sheet({
   task,
   color,
   from,
   bottom,
-  flight,
+  inFlight,
   onLanded,
 }: {
   task: AgentTask;
   color: string;
   from: string;
   bottom: number;
-  flight: FlowEvent | undefined;
+  inFlight: boolean;
   onLanded: () => void;
 }) {
-  // walkers (any flow with a visible sender) toss late; Nexus tosses after its window wind-up
-  const [delayMs] = useState(() => (flight ? (flight.fromAgentId === null ? 1450 : 1750) : 0));
+  const [arrived, setArrived] = useState(() => !inFlight);
   useEffect(() => {
-    if (!delayMs) return;
-    const t = window.setTimeout(onLanded, delayMs + 100);
-    return () => window.clearTimeout(t);
-    // fire once for this sheet's arrival
+    if (arrived || inFlight) return;
+    setArrived(true);
+    onLanded();
+    // fires exactly once, when this sheet's flight clears
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [inFlight, arrived]);
 
   return (
     <div
@@ -349,13 +351,13 @@ function Sheet({
         bottom,
         height: 4 + task.steps * 1.6,
         background: color,
-        opacity: 0.92,
+        opacity: arrived ? 0.92 : 0,
         border: "1px solid rgba(0,0,0,0.45)",
         borderRadius: 2,
         transform: "skewX(-24deg)",
         transition: "height 300ms ease, bottom 300ms ease",
         boxShadow: `0 0 8px ${color}55`,
-        animation: `sheet-drop 450ms ease-out ${delayMs}ms backwards`,
+        animation: arrived ? "sheet-drop 450ms ease-out" : "none",
       }}
     />
   );

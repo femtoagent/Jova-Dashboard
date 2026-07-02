@@ -7,7 +7,9 @@ import { officeTheme } from "@/lib/network/officeThemes";
 import type { Team } from "@/lib/network/types";
 import { OfficeBackdrop, windowRect } from "./OfficeBackdrop";
 import { AgentDesk, DESK_W, DESK_H } from "./AgentDesk";
-import { HandoffLayer, NexusVisitors, sidestepVector, walkVector, WALK_MS, type Anchor } from "./HandoffLayer";
+import { HandoffLayer, NexusVisitors, type AgentSpot, type Anchor } from "./HandoffLayer";
+import { WalkerLayer, deskZ, type WalkRecord } from "./WalkerLayer";
+import { planWalk } from "./walkPlan";
 import { InitiativeBoard } from "./InitiativeBoard";
 import { DemoBoard } from "./DemoBoard";
 import { ArrowLeft, CornersIn, CornersOut } from "@phosphor-icons/react";
@@ -115,13 +117,21 @@ export function TeamRoom({ team }: { team: Team }) {
   }, []);
 
   const wallH = Math.max(Math.min(box.h * 0.3, 210), 96);
-  const [fitAll, setFitAll] = useState(false);
+  // pannable rooms are also ZOOMABLE: pinch (or ctrl+wheel) between whole-room and readable
+  const [zoom, setZoom] = useState(MIN_READABLE);
 
   // iso grid that grows with the roster; pannable instead of unreadable for big teams
   const layout = useMemo(() => {
     const n = team.agents.length;
     if (!n || box.w < 40 || box.h < 40)
-      return { spots: [] as { agent: Team["agents"][number]; x: number; y: number; z: number }[], scale: 1, pannable: false, bounds: null as null | { minX: number; maxX: number; minY: number; maxY: number } };
+      return {
+        spots: [] as { agent: Team["agents"][number]; x: number; y: number; z: number }[],
+        scale: 1,
+        pannable: false,
+        minZoom: MIN_READABLE,
+        bounds: null as null | { minX: number; maxX: number; minY: number; maxY: number },
+        depth: { firstRowBottom: 0, stepY: 1 },
+      };
     const cols = Math.ceil(Math.sqrt(n));
     const rows = Math.ceil(n / cols);
     const units = team.agents.map((a, i) => {
@@ -141,7 +151,8 @@ export function TeamRoom({ team }: { team: Team }) {
     const floorH = box.h - wallH - 16;
     const fitScale = Math.min(availW / ((uxMax - uxMin) * stepXBase + DESK_W), floorH / (uyMax * stepYBase + DESK_H));
     const pannable = fitScale < MIN_READABLE;
-    const scale = pannable ? (fitAll ? Math.max(fitScale, 0.24) : MIN_READABLE) : Math.min(fitScale, 1.05);
+    const minZoom = Math.max(fitScale, 0.24); // fully zoomed out = the whole room
+    const scale = pannable ? Math.min(Math.max(zoom, minZoom), 1.1) : Math.min(fitScale, 1.05);
 
     const stepX = stepXBase * scale;
     const stepY = stepYBase * scale;
@@ -154,7 +165,7 @@ export function TeamRoom({ team }: { team: Team }) {
         agent: u.agent,
         x: cx + u.ux * stepX,
         y: firstRowBottom + u.uy * stepY,
-        z: 10 + u.uy * 2,
+        z: deskZ(u.uy),
       }))
       .sort((a, b) => a.z - b.z);
 
@@ -167,15 +178,27 @@ export function TeamRoom({ team }: { team: Team }) {
       minY: Math.min(...ys) - DESK_H * scale,
       maxY: Math.max(...ys),
     };
-    return { spots, scale, pannable, bounds };
-  }, [team.agents, box.w, box.h, wallH, fitAll]);
+    // depth scale for the walkers' painter's-algorithm z (shared coordinate system with desks)
+    const depth = { firstRowBottom, stepY };
+    return { spots, scale, pannable, minZoom, bounds, depth };
+  }, [team.agents, box.w, box.h, wallH, zoom]);
 
-  // ---- pan (big rosters) ----
+  // ---- pan + pinch-zoom (big rosters) ----
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const panDrag = useRef<{ id: number; startX: number; startY: number; baseX: number; baseY: number; moved: boolean } | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d0: number; z0: number; panX: number; panY: number } | null>(null);
   const suppressClick = useRef(false);
-  const panning = layout.pannable && !fitAll;
-  useEffect(() => setPan({ x: 0, y: 0 }), [team.id, panning]);
+  const panning = layout.pannable;
+  useEffect(() => {
+    setPan({ x: 0, y: 0 });
+    setZoom(MIN_READABLE);
+  }, [team.id]);
+  // zoom changed the content extents — keep the pan inside them
+  useEffect(() => {
+    setPan((p) => clampPan(p));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout.bounds?.minX, layout.bounds?.maxX, layout.bounds?.minY, layout.bounds?.maxY]);
 
   const clampPan = (p: { x: number; y: number }) => {
     const b = layout.bounds;
@@ -187,27 +210,72 @@ export function TeamRoom({ team }: { team: Team }) {
     };
   };
 
+  const pinchDist = () => {
+    const pts = [...pointers.current.values()];
+    return pts.length >= 2 ? Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y) : 0;
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!panning) return;
-    if ((e.target as HTMLElement).closest("[data-agent-desk],button")) return; // desks/chrome handle themselves
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try {
       ref.current?.setPointerCapture(e.pointerId);
     } catch {}
+    if (pointers.current.size === 2) {
+      // second finger down → pinch takes over (works even if a finger started on a desk)
+      pinch.current = { d0: pinchDist(), z0: layout.scale, panX: pan.x, panY: pan.y };
+      panDrag.current = null;
+      return;
+    }
+    if ((e.target as HTMLElement).closest("[data-agent-desk],button")) return; // desks/chrome handle their own taps
     panDrag.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, baseX: pan.x, baseY: pan.y, moved: false };
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = panDrag.current;
-    if (!d || e.pointerId !== d.id) return;
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;
-    if (!d.moved && Math.hypot(dx, dy) < 5) return;
-    d.moved = true;
-    setPan(clampPan({ x: d.baseX + dx, y: d.baseY + dy }));
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pz = pinch.current;
+    if (pz && pointers.current.size >= 2) {
+      const d = pinchDist();
+      if (pz.d0 > 0 && d > 0) {
+        const next = Math.min(Math.max(pz.z0 * (d / pz.d0), layout.minZoom), 1.1);
+        setZoom(next);
+        // scale the pan with the zoom so the view roughly holds its spot (then clamp)
+        const k = next / pz.z0;
+        setPan({ x: pz.panX * k, y: pz.panY * k });
+      }
+      return;
+    }
+    const drag = panDrag.current;
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+    drag.moved = true;
+    setPan(clampPan({ x: drag.baseX + dx, y: drag.baseY + dy }));
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(e.pointerId);
+    if (pinch.current && pointers.current.size < 2) {
+      pinch.current = null;
+      suppressClick.current = true; // a pinch is not a tap
+    }
     if (panDrag.current?.moved) suppressClick.current = true;
-    panDrag.current = null;
+    if (panDrag.current?.id === e.pointerId) panDrag.current = null;
   };
+
+  // trackpad/desktop zoom: ctrl+wheel (native non-passive listener so preventDefault works)
+  const zoomRef = useRef({ pannable: layout.pannable, minZoom: layout.minZoom });
+  zoomRef.current = { pannable: layout.pannable, minZoom: layout.minZoom };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!zoomRef.current.pannable || !(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      setZoom((zc) => Math.min(Math.max(zc * Math.exp(-e.deltaY * 0.0022), zoomRef.current.minZoom), 1.1));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   // ---- room celebration: an initiative (PM task) just shipped ----
   const pm = team.agents.find((a) => a.role === "pm");
@@ -225,15 +293,14 @@ export function TeamRoom({ team }: { team: Team }) {
     return () => window.clearTimeout(t);
   }, [pm?.tasks, pm]);
 
-  // ---- walking handoffs: slide the sender partway on the flight's clock ----
-  const [walks, setWalks] = useState<Record<string, Anchor>>({});
+  // ---- walking deliveries: any sender leaves its seat and walks the aisles ----
+  const [walks, setWalks] = useState<WalkRecord[]>([]);
   const seenFlows = useRef(new Set<string>());
-  const walkTimers = useRef<number[]>([]);
 
-  // flight anchors: each crewmate's chest (in the pannable content's coordinate space)
-  const anchors = useMemo(() => {
-    const map: Record<string, Anchor> = {};
-    for (const s of layout.spots) map[s.agent.id] = { x: s.x, y: s.y - 105 * layout.scale };
+  // per-agent geometry for flights + walk plans (in the pannable content's coordinate space)
+  const spotsById = useMemo(() => {
+    const map: Record<string, AgentSpot> = {};
+    for (const s of layout.spots) map[s.agent.id] = { desk: { x: s.x, y: s.y }, chest: { x: s.x, y: s.y - 105 * layout.scale } };
     return map;
   }, [layout]);
   const win = windowRect(box.w, wallH);
@@ -242,37 +309,24 @@ export function TeamRoom({ team }: { team: Team }) {
   const nexusAnchor: Anchor = { x: winCenter.x - pan.x, y: winCenter.y - pan.y };
 
   useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return; // flights skip too
     for (const f of flows) {
       // ANY flow with a visible sender walks — assigns and handoffs alike (Nexus stays outside)
       if (f.teamId !== team.id || !f.fromAgentId || seenFlows.current.has(f.id)) continue;
       seenFlows.current.add(f.id);
-      const from = anchors[f.fromAgentId];
-      const to = anchors[f.toAgentId];
-      if (!from || !to) continue;
+      const senderSpot = spotsById[f.fromAgentId];
+      const targetSpot = spotsById[f.toAgentId];
+      const agent = team.agents.find((a) => a.id === f.fromAgentId);
+      if (!senderSpot || !targetSpot || !agent) continue;
       const sender = f.fromAgentId;
-      const step = sidestepVector(from, to, layout.scale); // leg 1: around the desk
-      const dest = walkVector(from, to); // leg 2: toward the receiver
-      const setWalk = (v: Anchor | null) =>
-        setWalks((w) => {
-          if (v) return { ...w, [sender]: v };
-          const next = { ...w };
-          delete next[sender];
-          return next;
-        });
-      setWalk(step);
-      walkTimers.current.push(
-        window.setTimeout(() => setWalk(dest), 300), // main leg (arrives ~WALK_MS, then the toss)
-        window.setTimeout(() => setWalk(step), WALK_MS + 240), // walk back around the desk…
-        window.setTimeout(() => setWalk(null), WALK_MS + 620), // …and slot back in behind it
+      setWalks((ws) =>
+        // one trip at a time per crewmate — a rapid second send tosses from the desk instead
+        ws.some((w) => w.agent.id === sender) ? ws : [...ws, { flowId: f.id, agent, plan: planWalk(senderSpot.desk, targetSpot.desk, layout.scale) }],
       );
     }
-  }, [flows, team.id, anchors, layout.scale]);
-  useEffect(
-    () => () => {
-      for (const t of walkTimers.current) window.clearTimeout(t);
-    },
-    [],
-  );
+  }, [flows, team.id, team.agents, spotsById, layout.scale]);
+  const walkDone = (flowId: string) => setWalks((ws) => ws.filter((w) => w.flowId !== flowId));
+  const walkingIds = new Set(walks.map((w) => w.agent.id));
 
   const busy = team.agents.length ? team.agents.filter((a) => a.tasks.length > 0).length / team.agents.length : 0;
 
@@ -287,6 +341,7 @@ export function TeamRoom({ team }: { team: Team }) {
       ref={ref}
       data-team-room
       data-pannable={panning ? "true" : "false"}
+      data-zoom={layout.scale.toFixed(2)}
       onClick={() => {
         if (suppressClick.current) {
           suppressClick.current = false;
@@ -328,13 +383,17 @@ export function TeamRoom({ team }: { team: Team }) {
               data-room-fit
               onClick={(e) => {
                 e.stopPropagation();
-                setFitAll((v) => !v);
+                setZoom(layout.scale <= layout.minZoom + 0.02 ? MIN_READABLE : layout.minZoom);
               }}
-              title={fitAll ? "Zoom back in (drag to pan)" : "Fit the whole room"}
+              title={
+                layout.scale <= layout.minZoom + 0.02
+                  ? "Zoom back in (drag to pan, pinch to zoom)"
+                  : "Fit the whole room"
+              }
               className="absolute bottom-2 right-2 z-[650] flex items-center gap-1.5 rounded-lg border border-line bg-[#0d1120]/90 px-2.5 py-1.5 text-[11px] text-mist transition hover:bg-raise hover:text-bright"
             >
-              {fitAll ? <CornersOut size={13} weight="bold" /> : <CornersIn size={13} weight="bold" />}
-              {fitAll ? "Zoom" : "Fit"}
+              {layout.scale <= layout.minZoom + 0.02 ? <CornersOut size={13} weight="bold" /> : <CornersIn size={13} weight="bold" />}
+              {layout.scale <= layout.minZoom + 0.02 ? "Zoom" : "Fit"}
             </button>
           )}
 
@@ -351,17 +410,17 @@ export function TeamRoom({ team }: { team: Team }) {
                 z={s.z}
                 selected={selectedAgentId === s.agent.id}
                 talking={talkingAgentId === s.agent.id}
-                walkX={walks[s.agent.id]?.x ?? 0}
-                walkY={walks[s.agent.id]?.y ?? 0}
+                hideActor={walkingIds.has(s.agent.id)}
                 celebrateTick={celebrateTick}
                 onSelect={() => selectAgent(team.id, s.agent.id)}
               />
             ))}
-            <HandoffLayer team={team} anchors={anchors} nexusAnchor={nexusAnchor} />
+            <WalkerLayer team={team} walks={walks} scale={layout.scale} depth={layout.depth} onDone={walkDone} />
+            <HandoffLayer team={team} spots={spotsById} scale={layout.scale} nexusAnchor={nexusAnchor} />
             {bombLive && (
               <ConfettiBomb
                 key={celebrateTick}
-                origin={pm ? anchors[pm.id] : undefined}
+                origin={pm ? spotsById[pm.id]?.chest : undefined}
                 fallbackX={box.w / 2}
                 fallbackY={wallH + (box.h - wallH) / 2}
                 spreadX={box.w * 0.36}
